@@ -676,6 +676,25 @@ pub async fn ensure_mirror(
         });
     }
 
+    let stale = state
+        .collections()
+        .mappings
+        .iter()
+        .find(|m| {
+            crate::sync::invites::dead_mirror_of_the_same_share(m, &req.peer.pub_key, req.album_id)
+        })
+        .map(|m| m.id.clone());
+    if let Some(stale_id) = stale {
+        crate::sync::leave::leave_album(state, client, &stale_id, false)
+            .await
+            .map_err(|e| {
+                format!(
+                    "could not remove the dead mirror of \"{}\" before re-mirroring it: {e}",
+                    req.album_name
+                )
+            })?;
+    }
+
     // Created BY THE STAND-IN, so the stand-in owns what is filed into it — creating it as the
     // admin and then adding the stand-in yields `no albumAsset.create access`, silently.
     //
