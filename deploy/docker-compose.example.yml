@@ -1,45 +1,17 @@
-# Build the image first, from a clone of this repo:
-#   docker build -t immich-shared-albums:live .
-# Put the API key in a .env file next to this compose file (chmod 600):
-#   ISA_IMMICH_API_KEY=<immich admin api key — permissions in api-key.md>
 services:
   immich-shared-albums:
-    image: immich-shared-albums:live
-    restart: always
-    environment:
-      ISA_IMMICH_URL: http://immich-server:2283
-      ISA_IMMICH_API_KEY: ${ISA_IMMICH_API_KEY}
-      ISA_HOUSEHOLD_NAME: "The Example household"
-      # Every other setting has a working default — the full list with explanations
-      # is in configuration.md. The ones worth knowing about:
-      #
-      # Recommended when this server is reachable from the public internet:
-      #   ISA_LINK_JOIN_REQUIRES_PASSWORD: "true"   # refuse to enrol a peer from a link with no
-      #                                    # password set. Without it, whoever holds a
-      #                                    # forwarded link can introduce their server.
-      #   ISA_BOT_QUOTA_MB: "2048"         # storage cap on the bot users that own the
-      #                                    # stubs. They store ~2KB/photo and ~2MB/video,
-      #                                    # so size it well above your shared volume —
-      #                                    # too low and syncing silently starts failing.
-      #
-      # Running without the public relay: needs a reachable address and a published UDP port.
-      #   ISA_RELAY: "false"
-      #   ISA_ADVERTISE_ADDR: "home.example.com:8300"
-      # ...and the service's ports section below publishing 8300/udp.
+    image: ghcr.io/lukassor/immich-shared-albums:latest
+    container_name: immich_shared_albums
+    restart: unless-stopped
+    env_file: .env
     volumes:
-      # a named volume, owned by the container's non-root user. The identity key lives
-      # here: `docker compose down -v` would delete it and orphan every pairing.
       - isa-data:/data
-    # Running without the public relay publishes the transport port, forwarded on the router:
-    # ports:
-    #   - "8300:8300/udp"
     networks: [immich]
 
-# Join the docker network your Immich runs on, so IMMICH_URL resolves.
-# Find its name with:  docker inspect immich_server --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{end}}'
 networks:
   immich:
     external: true
     name: immich_default
+
 volumes:
   isa-data:

@@ -15,10 +15,11 @@ Whichever route you take, the step-by-step walkthrough with screenshots-level de
 
 ## Manual install
 
-1. **Build the image** from a clone of this repo:
+1. **Get the image.** Pull `ghcr.io/lukassor/immich-shared-albums:latest`, which is rebuilt on every
+   push to `main`, or build it from a clone of this repo:
 
    ```sh
-   docker build -t immich-shared-albums:live .
+   docker build -t ghcr.io/lukassor/immich-shared-albums:latest .
    ```
 
 2. **Create the API key.** In Immich web, signed in as an admin: *Account Settings → API Keys
@@ -26,8 +27,9 @@ Whichever route you take, the step-by-step walkthrough with screenshots-level de
    is broader than needed). The addon verifies the key at startup and logs anything missing.
 
 3. **Start the container** with [docker-compose.example.yml](./docker-compose.example.yml) —
-   it joins your Immich docker network and holds the key in a `.env` file. Every setting is
-   documented in [configuration.md](./configuration.md).
+   it joins your Immich docker network and reads its settings from a `.env` file, started from
+   [.env.example](./.env.example). Every setting is documented in
+   [configuration.md](./configuration.md).
 
 4. **Put it in front of Immich** so the stock apps see shared photos. Two shapes:
 
