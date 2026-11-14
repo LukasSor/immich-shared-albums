@@ -121,15 +121,16 @@ What each panel does, and what a person can do in it: [docs/using-the-panels.md]
 Prebuilt image: `ghcr.io/lukassor/immich-shared-albums:latest` (amd64, rebuilt on every push to `main`; `sha-<commit>` tags pin one build).
 
 ```sh
-mkdir immich-shared-albums && cd immich-shared-albums
-curl -fsSL -o docker-compose.yml https://raw.githubusercontent.com/LukasSor/immich-shared-albums/main/deploy/docker-compose.example.yml
-curl -fsSL -o .env https://raw.githubusercontent.com/LukasSor/immich-shared-albums/main/deploy/.env.example
+git clone https://github.com/LukasSor/immich-shared-albums.git
+cd immich-shared-albums
+cp docker-compose.example.yml docker-compose.yml
+cp .env.example .env
 chmod 600 .env
 ```
 
-Set `ISA_IMMICH_API_KEY` in `.env`, then `docker compose up -d`.
+Set `ISA_IMMICH_API_KEY` in `.env`, then `docker compose up -d`. The compose file and `.env` need nothing else from the clone; copy just those two files to any folder to run from there.
 
-`docker-compose.yml`:
+`docker-compose.example.yml`:
 
 ```yaml
 services:
@@ -151,7 +152,7 @@ volumes:
   isa-data:
 ```
 
-`.env`:
+`.env.example`:
 
 ```sh
 ISA_IMMICH_API_KEY=

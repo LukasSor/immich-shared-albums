@@ -26,9 +26,9 @@ Whichever route you take, the step-by-step walkthrough with screenshots-level de
    → New API Key*, ticking the permissions in [api-key.md](./api-key.md) (`all` also works but
    is broader than needed). The addon verifies the key at startup and logs anything missing.
 
-3. **Start the container** with [docker-compose.example.yml](./docker-compose.example.yml) —
+3. **Start the container** with [docker-compose.example.yml](../docker-compose.example.yml) —
    it joins your Immich docker network and reads its settings from a `.env` file, started from
-   [.env.example](./.env.example). Every setting is documented in
+   [.env.example](../.env.example). Every setting is documented in
    [configuration.md](./configuration.md).
 
 4. **Put it in front of Immich** so the stock apps see shared photos. Two shapes:

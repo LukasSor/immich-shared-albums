@@ -27,3 +27,5 @@ target/
 .cargo-home/
 # .github/scripts is Python — bytecode is never committed
 __pycache__/
+/.env
+/docker-compose.yml
