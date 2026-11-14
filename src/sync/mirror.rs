@@ -711,27 +711,6 @@ pub async fn ensure_mirror(
         return Err(format!("could not create the mirror album: {last_error}"));
     };
 
-    // A failure to add members is NOT fatal: the mirror exists and the reconciler will fill it, and
-    // the person can be added again on the next join. Failing here would throw away a created album.
-    match add_local_members(
-        client,
-        &album_id,
-        &host_key,
-        role,
-        req.for_user_ids.as_ref(),
-    )
-    .await
-    {
-        Ok(n) => {
-            let scope = match &req.for_user_ids {
-                Some(ids) => format!("{} named user(s)", ids.len()),
-                None => format!("{n} household member(s)"),
-            };
-            crate::log!("mirror shared with {scope}");
-        }
-        Err(e) => crate::log!("could not add local members to mirror: {e}"),
-    }
-
     let mapping = Mapping {
         id: new_uuid(),
         role: Role::Member,
@@ -761,6 +740,27 @@ pub async fn ensure_mirror(
     state
         .save()
         .map_err(|e| format!("could not record the mirror: {e}"))?;
+    // A failure to add members is NOT fatal: the mirror exists and the reconciler will fill it, and
+    // the person can be added again on the next join. Failing here would throw away a created album.
+    match add_local_members(
+        client,
+        &mapping.album_id,
+        &host_key,
+        role,
+        req.for_user_ids.as_ref(),
+    )
+    .await
+    {
+        Ok(n) => {
+            let scope = match &req.for_user_ids {
+                Some(ids) => format!("{} named user(s)", ids.len()),
+                None => format!("{n} household member(s)"),
+            };
+            crate::log!("mirror shared with {scope}");
+        }
+        Err(e) => crate::log!("could not add local members to mirror: {e}"),
+    }
+
     Ok(Mirrored {
         mapping,
         created: true,
