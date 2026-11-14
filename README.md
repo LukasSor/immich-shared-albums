@@ -116,6 +116,66 @@ You need Docker, an Immich admin API key, and a reverse proxy in front of Immich
 
 What each panel does, and what a person can do in it: [docs/using-the-panels.md](./docs/using-the-panels.md).
 
+### Docker Compose
+
+Prebuilt image: `ghcr.io/lukassor/immich-shared-albums:latest` (amd64, rebuilt on every push to `main`; `sha-<commit>` tags pin one build).
+
+```sh
+mkdir immich-shared-albums && cd immich-shared-albums
+curl -fsSL -o docker-compose.yml https://raw.githubusercontent.com/LukasSor/immich-shared-albums/main/deploy/docker-compose.example.yml
+curl -fsSL -o .env https://raw.githubusercontent.com/LukasSor/immich-shared-albums/main/deploy/.env.example
+chmod 600 .env
+```
+
+Set `ISA_IMMICH_API_KEY` in `.env`, then `docker compose up -d`.
+
+`docker-compose.yml`:
+
+```yaml
+services:
+  immich-shared-albums:
+    image: ghcr.io/lukassor/immich-shared-albums:latest
+    container_name: immich_shared_albums
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - isa-data:/data
+    networks: [immich]
+
+networks:
+  immich:
+    external: true
+    name: immich_default
+
+volumes:
+  isa-data:
+```
+
+`.env`:
+
+```sh
+ISA_IMMICH_API_KEY=
+ISA_HOUSEHOLD_NAME=The Example household
+ISA_IMMICH_URL=http://immich-server:2283
+
+# ISA_LINK_JOIN_REQUIRES_PASSWORD=false
+# ISA_BOT_QUOTA_MB=0
+# ISA_CACHE_MAX_MB=512
+# ISA_RELAY=true
+# ISA_ADVERTISE_ADDR=home.example.com:8300
+```
+
+| Topic             | What to do                                                                                                                                                  |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Immich network    | `name: immich_default` is the network Immich's own compose creates; find yours with `docker inspect immich_server --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{end}}'`. |
+| `ISA_IMMICH_URL`  | The Immich server's service or container name on that network, port 2283.                                                                                   |
+| Update            | `docker compose pull && docker compose up -d`                                                                                                               |
+| No public relay   | Set `ISA_RELAY=false` and `ISA_ADVERTISE_ADDR`, and add `ports: ["8300:8300/udp"]` to the service, forwarded on your router.                                  |
+| Build from source | Replace `image:` with `build: <path to a clone>`, or run `docker build -t ghcr.io/lukassor/immich-shared-albums:latest .` in the clone.                       |
+| Data              | `isa-data` holds the identity key; `docker compose down -v` deletes it and orphans every pairing.                                                           |
+
+Every variable: [deploy/configuration.md](./deploy/configuration.md).
+
 ### Public share links (optional)
 
 Want to send view-only links to people who don't run a server? Add [immich-public-proxy](https://github.com/alangrainger/immich-public-proxy) as the one public piece of your setup. It renders share links as a read-only gallery and exposes nothing else. Point its `IMMICH_URL` at this addon instead of Immich and shared photos from other servers show up in those links too. You can then turn off *"Allow other Immich users to join albums via shared links"* in the panel, so links are strictly for looking at.
