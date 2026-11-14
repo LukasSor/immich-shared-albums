@@ -164,6 +164,16 @@ async fn materialise_flight(
         );
         return Ok(true);
     }
+    if crate::sync::household_echo::is_household_authored(client, reference).await {
+        let _ = state
+            .store
+            .seen_add(&mapping.id, &reference.checksum, "", None, false);
+        crate::log!(
+            "skipped a photo this household contributed to \"{}\" — it is already in the library",
+            mapping.album_name
+        );
+        return Ok(true);
+    }
     materialise_upload(state, client, mapping, peer, reference).await
 }
 

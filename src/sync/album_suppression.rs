@@ -27,7 +27,11 @@ pub fn existing_copy_in_album(
 ) -> Option<SeenEntry> {
     let sharing = mappings_sharing_album(album_id, mappings);
     rows.iter()
-        .find(|r| r.checksum == checksum && sharing.iter().any(|id| id == &r.mapping))
+        .find(|r| {
+            r.checksum == checksum
+                && !r.local_asset.is_empty()
+                && sharing.iter().any(|id| id == &r.mapping)
+        })
         .cloned()
 }
 
@@ -130,6 +134,20 @@ mod tests {
             "summer.jpg",
             &[mapping_with("m1", "album-1", true)],
             &[row("m1", "summer.jpg")],
+        );
+        assert!(found.is_none());
+    }
+
+    #[test]
+    fn a_row_with_no_local_asset_is_not_a_copy_to_point_at() {
+        let mut skipped = row("m1", "summer.jpg");
+        skipped.local_asset = String::new();
+        skipped.origin_asset = None;
+        let found = existing_copy_in_album(
+            "album-1",
+            "summer.jpg",
+            &[mapping("m1", "album-1")],
+            &[skipped],
         );
         assert!(found.is_none());
     }

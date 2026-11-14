@@ -12,6 +12,7 @@ pub mod directory;
 pub mod engine;
 pub mod host_keys;
 pub mod house_bot;
+pub mod household_echo;
 pub mod index_freshness;
 pub mod index_offer;
 pub mod invitees;
