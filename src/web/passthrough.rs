@@ -14,38 +14,40 @@ const STRIPPED_RESPONSE_HEADERS: [&str; 3] =
 /// Headers a proxy must not forward verbatim: `host` names OUR listener, not Immich's.
 const STRIPPED_REQUEST_HEADERS: [&str; 2] = ["host", "content-length"];
 
-/// ONE client for the process, and it is not a micro-optimisation: a `reqwest::Client` owns a
-/// connection POOL, so building one per request means a fresh pool (and a fresh TCP connection to
-/// Immich) for every single request, with the old pools accumulating. Measured on the passthrough
-/// path: throughput fell from ~2300 to ~1400 rps across successive runs while pinning 6+ cores,
-/// against a Node sidecar holding a steady ~3400 rps on one. Redirects stay disabled — the proxy
-/// answers with Immich's own redirect rather than following it.
 static UPSTREAM: OnceLock<reqwest::Client> = OnceLock::new();
+static UPSTREAM_BODY: OnceLock<reqwest::Client> = OnceLock::new();
 
-fn upstream() -> Result<&'static reqwest::Client, String> {
-    if let Some(client) = UPSTREAM.get() {
-        return Ok(client);
-    }
-    // Two bounds, neither a total timeout: a CONNECT that never completes and a response whose
-    // HEADERS never arrive are both a hung Immich hanging every proxied request — the exact
-    // opposite of the "fail loudly" contract below. Bodies stay unbounded: a video stream may
-    // legitimately run for an hour, and `read_timeout` bounds the IDLE GAP between chunks, not
-    // the transfer.
-    let built = reqwest::Client::builder()
+const UPSTREAM_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+const UPSTREAM_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+fn build_client(read_timeout: Option<std::time::Duration>) -> Result<reqwest::Client, String> {
+    let builder = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
-        .connect_timeout(UPSTREAM_CONNECT_TIMEOUT)
-        .read_timeout(UPSTREAM_IDLE_TIMEOUT)
-        .build()
-        .map_err(|e| e.to_string())?;
-    // A lost race here just drops the duplicate; whichever client won is equivalent.
-    Ok(UPSTREAM.get_or_init(|| built))
+        .connect_timeout(UPSTREAM_CONNECT_TIMEOUT);
+    match read_timeout {
+        Some(timeout) => builder.read_timeout(timeout),
+        None => builder,
+    }
+    .build()
+    .map_err(|e| e.to_string())
 }
 
-/// Reaching Immich is seconds of work: a TCP connect outlasting this is a dead upstream.
-const UPSTREAM_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
-/// The longest silence allowed mid-response. A photo or video chunk gap longer than this means
-/// the upstream died mid-stream; it is an IDLE bound, so long transfers are unaffected.
-const UPSTREAM_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+fn carries_request_body(method: &Method) -> bool {
+    matches!(*method, Method::POST | Method::PUT | Method::PATCH)
+}
+
+fn upstream_for(method: &Method) -> Result<&'static reqwest::Client, String> {
+    let (slot, read_timeout) = if carries_request_body(method) {
+        (&UPSTREAM_BODY, None)
+    } else {
+        (&UPSTREAM, Some(UPSTREAM_IDLE_TIMEOUT))
+    };
+    if let Some(client) = slot.get() {
+        return Ok(client);
+    }
+    let built = build_client(read_timeout)?;
+    Ok(slot.get_or_init(|| built))
+}
 
 /// Proxy a request to Immich and stream the answer back.
 ///
@@ -75,7 +77,7 @@ pub async fn proxy_to_immich(
         path_and_query
     );
 
-    let client = match upstream() {
+    let client = match upstream_for(&method) {
         Ok(client) => client,
         Err(e) => return unreachable_immich(&e),
     };
@@ -194,6 +196,80 @@ fn unreachable_immich(reason: &str) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::body::Bytes;
+    use std::time::Duration;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    async fn immich_that_answers_after_the_whole_body() -> std::net::SocketAddr {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut received = Vec::new();
+            let mut buffer = [0u8; 1024];
+            while !received.ends_with(b"0\r\n\r\n") {
+                let read = socket.read(&mut buffer).await.unwrap();
+                if read == 0 {
+                    return;
+                }
+                received.extend_from_slice(&buffer[..read]);
+            }
+            socket
+                .write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\nconnection: close\r\n\r\nok")
+                .await
+                .unwrap();
+        });
+        address
+    }
+
+    fn body_sent_in_chunks(chunks: u32, gap: Duration) -> reqwest::Body {
+        reqwest::Body::wrap_stream(futures_lite::stream::unfold(0, move |sent| async move {
+            if sent == chunks {
+                return None;
+            }
+            tokio::time::sleep(gap).await;
+            Some((Ok::<_, std::io::Error>(Bytes::from_static(b"x")), sent + 1))
+        }))
+    }
+
+    async fn upload_status(
+        client: &reqwest::Client,
+        address: std::net::SocketAddr,
+    ) -> Result<StatusCode, reqwest::Error> {
+        let response = client
+            .post(format!("http://{address}/api/assets"))
+            .body(body_sent_in_chunks(6, Duration::from_millis(100)))
+            .send()
+            .await?;
+        Ok(StatusCode::from_u16(response.status().as_u16()).unwrap())
+    }
+
+    #[tokio::test]
+    async fn an_idle_bound_cuts_off_an_upload_that_outlasts_it() {
+        let address = immich_that_answers_after_the_whole_body().await;
+        let client = build_client(Some(Duration::from_millis(250))).unwrap();
+        assert!(upload_status(&client, address).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn an_upload_slower_than_the_idle_bound_still_completes_without_it() {
+        let address = immich_that_answers_after_the_whole_body().await;
+        let client = build_client(None).unwrap();
+        assert_eq!(
+            upload_status(&client, address).await.unwrap(),
+            StatusCode::OK
+        );
+    }
+
+    #[test]
+    fn only_requests_that_carry_a_body_skip_the_idle_bound() {
+        for method in [Method::POST, Method::PUT, Method::PATCH] {
+            assert!(carries_request_body(&method), "{method}");
+        }
+        for method in [Method::GET, Method::HEAD, Method::DELETE, Method::OPTIONS] {
+            assert!(!carries_request_body(&method), "{method}");
+        }
+    }
 
     #[test]
     fn the_failure_answer_names_immich_and_carries_the_reason() {
