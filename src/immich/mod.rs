@@ -8,4 +8,5 @@ pub mod materialise;
 pub mod migrate_domain;
 pub mod refs;
 pub mod stand_in_picture;
+pub mod thumbnail;
 pub mod unmeasured;

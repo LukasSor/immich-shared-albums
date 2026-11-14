@@ -732,6 +732,9 @@ pub async fn apply_ref_metadata(
     if meta.is_empty() {
         return;
     }
+    if !crate::immich::thumbnail::wait_until_thumbnailed(client, asset_id, key).await {
+        crate::log!("no thumbnail yet for {asset_id}, writing metadata anyway");
+    }
     if let Err(e) = client
         .json(
             reqwest::Method::PUT,
