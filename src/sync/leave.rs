@@ -169,6 +169,17 @@ pub async fn restore_shared_album(
     Ok(purge.purged)
 }
 
+async fn mirror_album_survives(
+    client: &Client,
+    album_id: &str,
+    auth: &crate::immich::client::Auth<'_>,
+) -> bool {
+    match client.get_album(album_id, auth).await {
+        Ok(album) => album.is_some(),
+        Err(error) => !error.reports_missing(),
+    }
+}
+
 /// `notify_origin: false` is for un-reunifying, which undoes the ADOPTION but not the SHARE: the
 /// person goes back to an ordinary mirror, and the invitation they still hold re-creates it through
 /// the normal invite path. Telling the origin "we left" would retire its owner mapping and the share
@@ -221,7 +232,13 @@ pub async fn leave_album(
             )
             .await
         {
-            crate::log!("mirror album delete failed: {e}");
+            if mirror_album_survives(client, &mapping.album_id, &auth).await {
+                crate::log!("mirror album delete failed: {e}");
+                return Err(RouteError::unavailable(format!(
+                    "could not delete the mirror album of \"{}\": {e}",
+                    mapping.album_name
+                )));
+            }
         }
     } else {
         crate::log!("kept \"{}\" — {}", mapping.album_name, plan.reason);

@@ -23,6 +23,9 @@ impl ImmichError {
     pub fn is_forbidden(&self) -> bool {
         self.status == 403
     }
+    pub fn reports_missing(&self) -> bool {
+        self.status == 404 || (self.status == 400 && self.body.contains("Not found"))
+    }
     /// This credential cannot see the thing it asked for. Immich answers 404 for an asset that is
     /// gone, but 400 `Not found or no asset.read access` for one that exists and belongs to someone
     /// else, so a caller probing for VISIBILITY must read every 4xx as "cannot see" — matching only
@@ -378,6 +381,36 @@ impl Default for Client {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn immich_error(status: u16, body: &str) -> ImmichError {
+        ImmichError {
+            path: "/albums/a".into(),
+            status,
+            body: body.into(),
+        }
+    }
+
+    #[test]
+    fn a_missing_answer_is_the_only_one_that_says_the_thing_is_gone() {
+        assert!(immich_error(404, "").reports_missing());
+        assert!(
+            immich_error(400, r#"{"message":"Not found or no album.delete access"}"#)
+                .reports_missing()
+        );
+    }
+
+    #[test]
+    fn a_refusal_or_a_failure_never_says_the_thing_is_gone() {
+        for (status, body) in [
+            (400, "Bad Request"),
+            (401, "Unauthorized"),
+            (403, "Forbidden"),
+            (500, "boom"),
+            (0, "connection refused"),
+        ] {
+            assert!(!immich_error(status, body).reports_missing(), "{status}");
+        }
+    }
 
     #[test]
     fn a_path_that_already_carries_api_is_refused_rather_than_doubled() {
