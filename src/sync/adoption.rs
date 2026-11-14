@@ -23,33 +23,32 @@ fn owns_it(album: &Value, user_id: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// The caller's own album matching `album_name`, if they have one.
+/// Every album the caller owns whose name matches `album_name`.
 ///
 /// The raw album list carries the ID, which the published index deliberately does not. Ownership and
 /// the name are checked HERE rather than trusted from the request: a body names an album and a
 /// person, and it establishes neither.
-pub fn find_adoptable_album(
+pub fn adoptable_albums(
     album_name: &str,
     caller_albums: &[Value],
     caller_user_id: &str,
-) -> Option<AdoptableAlbum> {
+) -> Vec<AdoptableAlbum> {
     let wanted = normalise_album_name(album_name);
     if wanted.is_empty() {
-        return None;
+        return Vec::new();
     }
     caller_albums
         .iter()
-        .find(|album| {
-            album.get("id").and_then(|v| v.as_str()).is_some()
-                && normalise_album_name(
-                    album
-                        .get("albumName")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or(""),
-                ) == wanted
+        .filter(|album| {
+            normalise_album_name(
+                album
+                    .get("albumName")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(""),
+            ) == wanted
                 && owns_it(album, caller_user_id)
         })
-        .and_then(|album| {
+        .filter_map(|album| {
             Some(AdoptableAlbum {
                 album_id: album.get("id").and_then(|v| v.as_str())?.to_string(),
                 name: album
@@ -59,6 +58,26 @@ pub fn find_adoptable_album(
                     .to_string(),
             })
         })
+        .collect()
+}
+
+/// The caller's own album matching `album_name`, only when exactly one does.
+///
+/// Two albums of the same name are never picked between: a wrong pick repoints a share at an
+/// unrelated album, so an ambiguous name is refused and the caller is told to tell them apart.
+pub fn find_adoptable_album(
+    album_name: &str,
+    caller_albums: &[Value],
+    caller_user_id: &str,
+) -> Option<AdoptableAlbum> {
+    let mut matches = adoptable_albums(album_name, caller_albums, caller_user_id);
+    (matches.len() == 1).then(|| matches.remove(0))
+}
+
+pub fn ambiguity_message(album_name: &str, count: usize) -> String {
+    format!(
+        "you have {count} albums called \"{album_name}\" — rename all but one so the right album is reunited"
+    )
 }
 
 /// The album a REUNION may put in place of a share's mirror.
@@ -142,6 +161,37 @@ mod tests {
             can_unify_own_album("mirror", "Holidays", "Holidays", &albums, "me").is_none(),
             "that is not a reunion, it is a no-op dressed as one"
         );
+    }
+
+    #[test]
+    fn two_owned_albums_with_one_name_are_never_picked_between() {
+        let albums = vec![
+            album("a", "Holidays", "owner", "me"),
+            album("b", "Holidays", "owner", "me"),
+        ];
+        assert_eq!(adoptable_albums("Holidays", &albums, "me").len(), 2);
+        assert!(find_adoptable_album("Holidays", &albums, "me").is_none());
+    }
+
+    #[test]
+    fn a_same_named_album_someone_else_owns_does_not_make_the_match_ambiguous() {
+        let albums = vec![
+            album("a", "Holidays", "owner", "me"),
+            album("b", "Holidays", "owner", "someone-else"),
+        ];
+        assert_eq!(
+            find_adoptable_album("Holidays", &albums, "me").map(|found| found.album_id),
+            Some("a".to_string())
+        );
+    }
+
+    #[test]
+    fn a_reunion_is_refused_when_two_of_our_albums_share_the_name() {
+        let albums = vec![
+            album("a", "Holidays", "owner", "me"),
+            album("b", "Holidays", "owner", "me"),
+        ];
+        assert!(can_unify_own_album("mirror", "Holidays", "Holidays", &albums, "me").is_none());
     }
 
     #[test]

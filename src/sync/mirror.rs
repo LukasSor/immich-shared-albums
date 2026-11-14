@@ -379,6 +379,16 @@ pub async fn unify_own_album(
         .ok_or_else(|| {
             crate::web::route_error::RouteError::unavailable("could not read your albums")
         })?;
+    let candidates = crate::sync::adoption::adoptable_albums(
+        requested_album_name,
+        &caller_albums,
+        owner_user_id,
+    );
+    if candidates.len() > 1 {
+        return Err(crate::web::route_error::RouteError::bad_input(
+            crate::sync::adoption::ambiguity_message(requested_album_name, candidates.len()),
+        ));
+    }
     let own = crate::sync::adoption::can_unify_own_album(
         &mapping.album_id,
         &mapping.album_name,

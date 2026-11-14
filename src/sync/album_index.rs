@@ -253,6 +253,13 @@ pub async fn invite_peer_to_reunite(
     let caller_albums = read_caller_albums(client, creds).await.ok_or_else(|| {
         crate::web::route_error::RouteError::unavailable("could not read your albums")
     })?;
+    let candidates =
+        crate::sync::adoption::adoptable_albums(album_name, &caller_albums, caller_user_id);
+    if candidates.len() > 1 {
+        return Err(crate::web::route_error::RouteError::bad_input(
+            crate::sync::adoption::ambiguity_message(album_name, candidates.len()),
+        ));
+    }
     let mine =
         crate::sync::adoption::find_adoptable_album(album_name, &caller_albums, caller_user_id)
             .ok_or_else(|| {
