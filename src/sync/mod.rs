@@ -2,6 +2,7 @@
 pub mod adoption;
 pub mod album_grant;
 pub mod album_index;
+pub mod album_rename;
 pub mod album_suppression;
 pub mod album_teardown;
 pub mod audit;

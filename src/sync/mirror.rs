@@ -71,7 +71,7 @@ pub(crate) fn member_role(permissions: &str) -> &'static str {
 
 /// The album name this household shows. `{name}` and `{peer}` are the only substitutions, and they
 /// are the operator's template, not ours to extend.
-fn mirror_album_name(album_name: &str, peer_name: &str) -> String {
+pub(crate) fn mirror_album_name(album_name: &str, peer_name: &str) -> String {
     cfg()
         .mirror_album_template
         .replace("{name}", album_name)

@@ -336,6 +336,12 @@ pub async fn detect_invites_once(state: &State, client: &Client) -> usize {
             if existing.permissions != entry.permissions {
                 changed = true;
             }
+            let renamed =
+                crate::sync::album_rename::name_change(&existing.album_name, &entry.name).is_some();
+            if renamed {
+                changed = true;
+                nudge_peer_invitations(&peer);
+            }
             if changed {
                 if let Some(live) = state
                     .collections()
@@ -348,6 +354,9 @@ pub async fn detect_invites_once(state: &State, client: &Client) -> usize {
                     live.dead_reason = None;
                     live.for_peer_user_ids = Some(for_peer_user_ids.clone());
                     live.permissions = entry.permissions.clone();
+                    if renamed {
+                        live.album_name = entry.name.clone();
+                    }
                 }
                 let _ = state.save();
             }
@@ -699,6 +708,22 @@ async fn pull_invitations_once(state: &State, client: &Client) {
                     .unwrap_or_default();
                 if known.role == Role::Member && known.via == "invite" {
                     sync_mirror_members(state, client, &known, &for_user_ids).await;
+                    let origin_name = invitation
+                        .pointer("/album/name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default();
+                    if !origin_name.is_empty() {
+                        let wanted =
+                            crate::sync::mirror::mirror_album_name(origin_name, &peer.name);
+                        if crate::sync::album_rename::name_change(&known.album_name, &wanted)
+                            .is_some()
+                        {
+                            crate::sync::album_rename::rename_mirror(
+                                state, client, &known, &wanted,
+                            )
+                            .await;
+                        }
+                    }
                 }
                 continue;
             }
