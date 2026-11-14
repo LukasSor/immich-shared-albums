@@ -123,14 +123,13 @@ Prebuilt image: `ghcr.io/lukassor/immich-shared-albums:latest` (amd64, rebuilt o
 ```sh
 git clone https://github.com/LukasSor/immich-shared-albums.git
 cd immich-shared-albums
-cp docker-compose.example.yml docker-compose.yml
-cp .env.example .env
+cp example.env .env
 chmod 600 .env
 ```
 
-Set `ISA_IMMICH_API_KEY` in `.env`, then `docker compose up -d`. The compose file and `.env` need nothing else from the clone; copy just those two files to any folder to run from there.
+Set `ISA_IMMICH_API_KEY` in `.env`, then `docker compose up -d`. `docker-compose.yml` and `example.env` need nothing else from the clone; copy just those two files to any folder to run from there.
 
-`docker-compose.example.yml`:
+`docker-compose.yml`:
 
 ```yaml
 services:
@@ -152,7 +151,7 @@ volumes:
   isa-data:
 ```
 
-`.env.example`:
+`example.env`:
 
 ```sh
 ISA_IMMICH_API_KEY=
