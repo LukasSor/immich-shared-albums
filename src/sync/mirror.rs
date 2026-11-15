@@ -8,6 +8,7 @@ use crate::store::{Mapping, Peer, Role};
 use crate::sync::peer_mapping_id::peer_of;
 use serde_json::{json, Value};
 use std::collections::HashMap;
+use std::sync::{Arc, OnceLock};
 
 /// What a mirror is asked to become. Only the facts the origin supplied.
 pub struct MirrorRequest<'a> {
@@ -37,6 +38,19 @@ pub struct MirrorRequest<'a> {
 pub struct Mirrored {
     pub mapping: Mapping,
     pub created: bool,
+}
+
+type CreationLocks = std::sync::Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>;
+
+fn creation_lock(peer_pub: &str, remote_album_id: &str) -> Arc<tokio::sync::Mutex<()>> {
+    static LOCKS: OnceLock<CreationLocks> = OnceLock::new();
+    LOCKS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap()
+        .entry(format!("{peer_pub}:{remote_album_id}"))
+        .or_default()
+        .clone()
 }
 
 /// An existing live mirror of this share, if there is one. Re-joining finds it rather than making a
@@ -600,6 +614,9 @@ pub async fn ensure_mirror(
     client: &Client,
     req: &MirrorRequest<'_>,
 ) -> Result<Mirrored, String> {
+    let _only_creation_of_this_share = creation_lock(&req.peer.pub_key, req.album_id)
+        .lock_owned()
+        .await;
     let owner_name = req
         .album_owner_name
         .clone()
@@ -830,6 +847,48 @@ mod tests {
             "anything unrecognised is the safe role"
         );
         assert_eq!(member_role("admin"), "viewer");
+    }
+
+    #[test]
+    fn one_share_always_gets_the_same_creation_lock() {
+        assert!(std::sync::Arc::ptr_eq(
+            &creation_lock("peer-a", "album-1"),
+            &creation_lock("peer-a", "album-1")
+        ));
+    }
+
+    #[test]
+    fn different_shares_do_not_share_a_creation_lock() {
+        let share = creation_lock("peer-a", "album-1");
+        assert!(!std::sync::Arc::ptr_eq(
+            &share,
+            &creation_lock("peer-a", "album-2")
+        ));
+        assert!(!std::sync::Arc::ptr_eq(
+            &share,
+            &creation_lock("peer-b", "album-1")
+        ));
+    }
+
+    #[tokio::test]
+    async fn a_second_creation_of_one_share_waits_for_the_first() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let first_finished = std::sync::Arc::new(AtomicBool::new(false));
+        let first_creation = creation_lock("peer-wait", "album-wait").lock_owned().await;
+        let second_creation = {
+            let first_finished = first_finished.clone();
+            tokio::spawn(async move {
+                let _second = creation_lock("peer-wait", "album-wait").lock_owned().await;
+                first_finished.load(Ordering::SeqCst)
+            })
+        };
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        first_finished.store(true, Ordering::SeqCst);
+        drop(first_creation);
+        assert!(
+            second_creation.await.unwrap(),
+            "the second creation ran before the first had finished"
+        );
     }
 
     #[test]
