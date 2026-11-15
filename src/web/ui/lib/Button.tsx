@@ -19,12 +19,16 @@ export type ButtonFill = keyof typeof FILLS;
 export const Button = ({
   fill = 'filled',
   className,
+  class: classProp,
   children,
   ...rest
-}: JSX.IntrinsicElements['button'] & { fill?: ButtonFill }) => (
-  // type defaults to "button": a button inside a form that nobody marked is a submit by default,
-  // which turns "Cancel" into "send this".
-  <button type="button" class={`isa-btn ${FILLS[fill]}${className ? ` ${className}` : ''}`} {...rest}>
-    {children}
-  </button>
-);
+}: JSX.IntrinsicElements['button'] & { fill?: ButtonFill }) => {
+  const extra = [className, classProp].filter(Boolean).join(' ');
+  return (
+    // type defaults to "button": a button inside a form that nobody marked is a submit by default,
+    // which turns "Cancel" into "send this".
+    <button type="button" {...rest} class={`isa-btn ${FILLS[fill]}${extra ? ` ${extra}` : ''}`}>
+      {children}
+    </button>
+  );
+};

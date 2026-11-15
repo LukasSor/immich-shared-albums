@@ -10,7 +10,7 @@ export const LinkServer = ({
   onOutcome,
 }: {
   onLinked: () => void;
-  /** Where an action's outcome goes: the snackbar the panel already owns, not a line in this card. */
+  /** Where an action's outcome goes: the toast the panel already owns, not a line in this card. */
   onOutcome: (outcome: Outcome) => void;
 }) => {
   const [link, setLink] = useState<string | null>(null);

@@ -1,6 +1,7 @@
 /** web/ui/pages/root/App.tsx — the one URL to remember: it decides which panel to open. See ../../../http-router.md. */
 import { useEffect, useState } from 'preact/hooks';
 import { Card } from '../../lib/Card.tsx';
+import { PageHead } from '../../lib/PageHead.tsx';
 import { myAlbums } from '../me/api.ts';
 
 const ROUTE_PREFIX = '/immich-shared-albums';
@@ -35,25 +36,27 @@ export const App = () => {
 
   return (
     <>
-      <div class="isa-page-head">
-        <h1 class="isa-page-title">🔗 Shared albums</h1>
-      </div>
+      <PageHead />
       <Card>
-        {/* `choice` alongside `isa-choice` is a TEST CONTRACT — the browser lane asserts on a.choice. */}
-        <a href={`${ROUTE_PREFIX}/me`} class="isa-choice choice">
-          <span class="isa-row-main">
-            <span class="isa-row-title">Your shared albums</span>
-            <span class="isa-row-sub">Albums you share across servers</span>
-          </span>
-          <span class="isa-chevron">›</span>
-        </a>
-        <a href={`${ROUTE_PREFIX}/admin`} class="isa-choice choice">
-          <span class="isa-row-main">
-            <span class="isa-row-title">Server settings and pairings</span>
-            <span class="isa-row-sub">Linked servers, pairing, and this server's settings · admins only</span>
-          </span>
-          <span class="isa-chevron">›</span>
-        </a>
+        <div class="isa-rows">
+          {/* `choice` alongside `isa-choice` is a TEST CONTRACT — the browser lane asserts on a.choice. */}
+          <a href={`${ROUTE_PREFIX}/me`} class="isa-choice choice">
+            <span class="isa-row-main">
+              <span class="isa-row-title">Your shared albums</span>
+              <span class="isa-row-sub">Albums you share across servers</span>
+            </span>
+            <span class="isa-chevron">›</span>
+          </a>
+          <a href={`${ROUTE_PREFIX}/admin`} class="isa-choice choice">
+            <span class="isa-row-main">
+              <span class="isa-row-title">Server settings and pairings</span>
+              <span class="isa-row-sub">
+                Linked servers, pairing, and this server's settings · admins only
+              </span>
+            </span>
+            <span class="isa-chevron">›</span>
+          </a>
+        </div>
       </Card>
     </>
   );

@@ -1,4 +1,4 @@
-/** web/ui/lib/Switch.tsx — an on/off setting, as the real checkbox drawn as a Material switch. See design-system.md. */
+/** web/ui/lib/Switch.tsx — an on/off setting, as the real checkbox drawn the way Immich draws its switch. See design-system.md. */
 export const Switch = ({
   id,
   checked,

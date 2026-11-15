@@ -7,6 +7,7 @@ import { Button } from '../../lib/Button.tsx';
 import { Card } from '../../lib/Card.tsx';
 import { followServerHints } from '../../lib/live.ts';
 import { Notice } from '../../lib/Notice.tsx';
+import { PageHead } from '../../lib/PageHead.tsx';
 import { Setting } from '../../lib/Setting.tsx';
 import { Switch } from '../../lib/Switch.tsx';
 import { Confirm, type Confirmation } from '../../lib/confirm.tsx';
@@ -157,10 +158,7 @@ export const App = () => {
     // A fragment, not a <main>: document.tsx already provides the page's one <main>, and a second
     // inside it is invalid and announces two landmarks.
     <>
-      <div class="isa-page-head">
-        <h1 class="isa-page-title">🔗 Shared albums</h1>
-        <span class="isa-page-household">· {household || '…'}</span>
-      </div>
+      <PageHead household={household || '…'} />
       <p class="isa-page-lede">
         Only your own Immich account.
         {isAdmin && (
@@ -190,6 +188,7 @@ export const App = () => {
                       album, so the row reads the same either way. */}
                   <div class="isa-row-action">
                     <Button
+                      fill="danger"
                       disabled={!!detaching}
                       onClick={() =>
                         setAsking({

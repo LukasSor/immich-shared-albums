@@ -15,6 +15,7 @@ body {
   border-radius: var(--isa-radius-card);
   padding: var(--isa-pad-hero) var(--isa-pad-card) var(--isa-pad-card);
   text-align: center;
+  border: 1px solid var(--isa-border);
   box-shadow: var(--isa-shadow-2);
   animation: isa-rise-in var(--isa-duration-long) var(--isa-ease-emphasized) both;
 }
@@ -24,15 +25,17 @@ body {
   width: 56px;
   height: 56px;
   margin: 0 auto var(--isa-space-4);
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--isa-accent), var(--isa-accent-2));
-  font-size: 26px;
-  box-shadow: var(--isa-shadow-1);
+  border-radius: var(--isa-radius-md);
+  background: var(--isa-accent-container);
+  color: var(--isa-accent);
+}
+.logo svg {
+  width: 28px;
+  height: 28px;
 }
 .isa-hero-title {
   font-size: 20px;
   font-weight: 600;
-  letter-spacing: -0.02em;
   margin: 0 0 var(--isa-space-2);
 }
 .card p {
@@ -86,17 +89,16 @@ body {
   min-height: var(--isa-touch);
   box-sizing: border-box;
   padding: 0 var(--isa-space-6);
-  border-radius: var(--isa-radius-pill);
+  border-radius: var(--isa-radius-md);
   background: var(--isa-accent);
   color: var(--isa-accent-ink);
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 500;
   text-decoration: none;
-  box-shadow: var(--isa-shadow-1);
-  transition: box-shadow var(--isa-duration-short) var(--isa-ease-standard);
+  transition: background-color var(--isa-duration-medium) var(--isa-ease-standard);
 }
 .cta:hover {
-  box-shadow: var(--isa-shadow-2);
+  background: color-mix(in srgb, var(--isa-accent) 80%, transparent);
 }
 /* The album's own outcome line: reserved height, so a message arriving does not move the buttons. */
 .out {

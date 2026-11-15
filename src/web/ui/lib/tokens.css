@@ -1,58 +1,58 @@
 /* web/ui/lib/tokens.css — the one place a colour, radius, space or duration is written down. See design-system.md. */
 :root {
-  --isa-font: 'Overpass', 'Inter', Roboto, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --isa-font:
+    'GoogleSans', 'Google Sans', 'Overpass', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    sans-serif;
 
-  /* Surfaces. Google stacks tonal containers rather than outlines, so depth is a fill change
-     first and a hairline second. */
-  --isa-bg: #f8f9fa;
+  /* Surfaces. Immich draws a card as a bordered white panel on a white page, so depth is a hairline
+     first and a fill change second. */
+  --isa-bg: #ffffff;
   --isa-surface: #ffffff;
-  --isa-sunken: #eef0f3;
-  --isa-surface-sunken-strong: #e4e7eb;
+  --isa-sunken: #f5f5f5;
 
   /* Ink, three steps: what you read, what you read as context, what is a boundary. */
-  --isa-ink: #202124;
-  --isa-ink-muted: #5f6368;
-  --isa-ink-subtle: #666a6f;
+  --isa-ink: #000000;
+  --isa-ink-muted: #4b5563;
+  --isa-ink-subtle: #646b77;
 
-  --isa-hairline: rgba(0, 0, 0, 0.09);
-  --isa-outline: rgba(0, 0, 0, 0.14);
+  --isa-border: #e5e5e5;
+  --isa-hairline: #e5e5e5;
 
   --isa-accent: #4250af;
-  --isa-accent-2: #7c3aed;
   --isa-accent-ink: #ffffff;
-  --isa-accent-container: #e8eaf6;
-  --isa-focus: rgba(66, 80, 175, 0.15);
-  --isa-scrim: rgba(32, 33, 36, 0.45);
+  --isa-accent-container: #eef2fe;
+  --isa-scrim: rgba(0, 0, 0, 0.3);
 
-  --isa-danger: #c5221f;
-  --isa-danger-surface: #fce8e6;
-  --isa-ok: #137333;
+  --isa-danger: #c81c15;
+  --isa-danger-surface: #fef4f3;
+  --isa-ok: #07702a;
 
-  /* The switch's own four values: the thumb grows when pressed and the track alone cannot express
-     that, so the two states are separate colours rather than one inverted. */
-  --isa-switch-track-off: #c6cad1;
-  --isa-switch-thumb-off: #6b7076;
-  --isa-switch-track-on: var(--isa-accent);
-  --isa-switch-thumb-on: var(--isa-accent-ink);
+  /* The switch's own values: Immich draws the off state as an outlined track with a dark thumb and
+     the on state as a tinted track with a primary thumb, so the two states are separate colours
+     rather than one inverted. */
+  --isa-switch-track-off: #e5e5e5;
+  --isa-switch-border-off: #8a8a8a;
+  --isa-switch-thumb-off: #4b5563;
+  --isa-switch-track-on: #d9dbf3;
+  --isa-switch-thumb-on: var(--isa-accent);
 
-  /* State layers: the tint a hover and a press lay over whatever fill is already there. */
-  --isa-state-hover: rgba(32, 33, 36, 0.08);
-  --isa-state-press: rgba(32, 33, 36, 0.12);
+  /* The tint a hover lays over a row or a quiet control. */
+  --isa-state-hover: rgba(0, 0, 0, 0.05);
 
-  /* The snackbar: dark in BOTH schemes, as Google Photos draws it. Inverting the page's ink instead
-     puts a glaring white box on a dark page. */
-  --isa-notice-surface: #31353b;
-  --isa-notice-ink: #e8eaed;
+  /* The toast is a card in Immich, so it takes the page's own surface and ink. */
+  --isa-notice-surface: var(--isa-surface);
+  --isa-notice-ink: var(--isa-ink);
 
-  --isa-shadow-1: 0 1px 2px rgba(60, 64, 67, 0.12), 0 1px 3px rgba(60, 64, 67, 0.1);
-  --isa-shadow-2: 0 2px 6px rgba(60, 64, 67, 0.14), 0 8px 28px rgba(60, 64, 67, 0.16);
-  --isa-shadow-3: 0 6px 16px rgba(60, 64, 67, 0.18), 0 20px 48px rgba(60, 64, 67, 0.24);
+  --isa-shadow-1: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+  --isa-shadow-2: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  --isa-shadow-3: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
   --isa-spinner: rgba(255, 255, 255, 0.4);
 
-  /* Shape: a small step, a card, and the pill every control rounds to. */
-  --isa-radius-sm: 10px;
-  --isa-radius-lg: 18px;
-  --isa-radius-card: 24px;
+  /* Shape, in Immich's steps: an input, a button, a card, and the pill a switch rounds to. */
+  --isa-radius-sm: 8px;
+  --isa-radius-md: 12px;
+  --isa-radius-lg: 16px;
+  --isa-radius-card: 16px;
   --isa-radius-pill: 999px;
 
   --isa-pad-card: 20px;
@@ -71,57 +71,54 @@
   /* A thumb's floor: anything tappable is at least this tall, whatever its type size says. */
   --isa-touch: 44px;
 
-  /* Motion: Google's two curves — standard for anything that settles, emphasized for the entrance
-     and the press that has to feel like it was answered. */
-  --isa-ease-standard: cubic-bezier(0.2, 0, 0, 1);
-  --isa-ease-emphasized: cubic-bezier(0.05, 0.7, 0.1, 1);
-  --isa-duration-short: 120ms;
-  --isa-duration-medium: 220ms;
-  --isa-duration-long: 400ms;
+  /* Motion: one curve, the one Immich's own transitions use, and short durations — a control
+     answers a press, it does not perform. */
+  --isa-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --isa-ease-emphasized: cubic-bezier(0.4, 0, 0.2, 1);
+  --isa-duration-short: 100ms;
+  --isa-duration-medium: 150ms;
+  --isa-duration-long: 250ms;
 
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --isa-bg: #15181e;
-    --isa-surface: #1b1f26;
-    --isa-sunken: #262b33;
-    --isa-surface-sunken-strong: #303640;
+    --isa-bg: #0a0a0a;
+    --isa-surface: #171717;
+    --isa-sunken: #262626;
 
-    --isa-ink: #e8eaed;
-    --isa-ink-muted: #9aa0a6;
-    --isa-ink-subtle: #969ba1;
+    --isa-ink: #e5e7eb;
+    --isa-ink-muted: #9ca3af;
+    --isa-ink-subtle: #9ca3af;
 
-    --isa-hairline: rgba(255, 255, 255, 0.07);
-    --isa-outline: rgba(255, 255, 255, 0.16);
+    --isa-border: rgba(255, 255, 255, 0.1);
+    --isa-hairline: rgba(255, 255, 255, 0.1);
 
-    --isa-accent: #a8c7fa;
-    --isa-accent-2: #a8c7fa;
-    --isa-accent-ink: #0d1b3d;
-    --isa-accent-container: #2a3555;
-    --isa-focus: rgba(168, 199, 250, 0.22);
-    --isa-scrim: rgba(0, 0, 0, 0.6);
+    --isa-accent: #accbfa;
+    --isa-accent-ink: #000000;
+    --isa-accent-container: #1a2433;
+    --isa-scrim: rgba(0, 0, 0, 0.3);
 
-    --isa-danger: #f28b82;
-    --isa-danger-surface: #3a1d1d;
-    --isa-ok: #81c995;
+    --isa-danger: #fa6967;
+    --isa-danger-surface: #3b1517;
+    --isa-ok: #15d556;
 
-    --isa-switch-track-off: #44474d;
-    --isa-switch-thumb-off: #b7bcc4;
-    /* The "on" pair follows the dark accent, and is restated here rather than inherited: each
-       scheme has to stand on its own for check-contrast.mjs to measure it. */
-    --isa-switch-track-on: var(--isa-accent);
-    --isa-switch-thumb-on: var(--isa-accent-ink);
+    --isa-switch-track-off: #262626;
+    --isa-switch-border-off: #6b7280;
+    --isa-switch-thumb-off: #6b7280;
+    /* The "on" pair is restated here rather than inherited: each scheme has to stand on its own for
+       check-contrast.mjs to measure it. */
+    --isa-switch-track-on: #314158;
+    --isa-switch-thumb-on: var(--isa-accent);
 
-    --isa-state-hover: rgba(232, 234, 237, 0.08);
-    --isa-state-press: rgba(232, 234, 237, 0.12);
+    --isa-state-hover: rgba(255, 255, 255, 0.08);
 
-    --isa-notice-surface: #2e333b;
-    --isa-notice-ink: #e8eaed;
+    --isa-notice-surface: var(--isa-surface);
+    --isa-notice-ink: var(--isa-ink);
 
-    --isa-shadow-1: 0 1px 3px rgba(0, 0, 0, 0.45);
-    --isa-shadow-2: 0 10px 32px rgba(0, 0, 0, 0.55);
-    --isa-shadow-3: 0 16px 48px rgba(0, 0, 0, 0.6);
+    --isa-shadow-1: 0 1px 3px 0 rgba(0, 0, 0, 0.5), 0 1px 2px -1px rgba(0, 0, 0, 0.5);
+    --isa-shadow-2: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.5);
+    --isa-shadow-3: 0 10px 15px -3px rgba(0, 0, 0, 0.55), 0 4px 6px -4px rgba(0, 0, 0, 0.55);
     --isa-spinner: rgba(255, 255, 255, 0.4);
 
     color-scheme: dark;

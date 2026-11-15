@@ -1,7 +1,7 @@
 /** web/ui/lib/announce.ts — where an action's outcome goes, and for how long. See design-system.md. */
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
 
-/** What an action did. Said once, in the snackbar: a row that writes its outcome into its own card
+/** What an action did. Said once, in the toast: a row that writes its outcome into its own card
  *  puts the message where the row it describes no longer is — unlinking DELETES the row, so the note
  *  that unlinking worked left the screen with it. */
 export type Outcome = { kind: 'ok' | 'error'; text: string };

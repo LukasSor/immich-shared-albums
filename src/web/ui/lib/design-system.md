@@ -3,6 +3,27 @@
 One place each thing is written down, so a page states intent and the theme states everything else.
 The layers below are the whole vocabulary; a rule that is not here is a rule a page invented.
 
+## The look: Immich's own
+
+These pages open beside Immich's, so they are drawn in Immich's design language, taken from its
+`@immich/ui` theme and components rather than invented:
+
+| Thing           | Immich's value                                                                            | Token / class                         |
+| --------------- | ----------------------------------------------------------------------------------------- | ------------------------------------- |
+| Primary         | `#4250af` light, `#accbfa` dark; filled text white / black                                | `--isa-accent`, `--isa-accent-ink`    |
+| Page, card      | white / `#0a0a0a` page; white / `#171717` card, 1px border, `shadow-sm`, 16px corners     | `--isa-bg`, `--isa-surface`, `.isa-card` |
+| Ink             | black / `#e5e7eb`; muted gray-600 / gray-400                                               | `--isa-ink`, `--isa-ink-muted`        |
+| Section heading | 16px, medium, primary colour, sentence case                                               | `.isa-section-title`                  |
+| Button          | 12px corners, 14px medium; filled hovers to 80%, outline is a 10% tint on a primary border | `.isa-btn`                            |
+| Input           | filled well, 1px border, 8px corners, 1px primary ring on focus                           | `.isa-field`                          |
+| Toast, dialog   | a bordered card; the dialog is header / body / footer split by hairlines on a 30% scrim    | `.isa-notice`, `.isa-dialog`          |
+| Font            | `GoogleSans`, falling back to system sans — the font file is Immich's and is not shipped here | `--isa-font`                          |
+
+Two deliberate departures, both for accessibility: Immich's danger red (`danger-500`) is 3.9:1 on
+white, so text and fills use its next step (`danger-600`, `#c81c15`); and every control keeps a 44px
+floor where Immich's medium button is shorter. `check-contrast.mjs` measures every pair in both
+schemes.
+
 ## The layers
 
 | File                  | Owns                                                                                                                                                                       |
@@ -24,18 +45,22 @@ page's CTA computes to `rgb(66, 80, 175)`. Changing the light accent changes tha
 
 | Export          | Renders                                                    | Used by                                              |
 | --------------- | ---------------------------------------------------------- | ---------------------------------------------------- |
-| `Button`        | `<button class="isa-btn isa-btn--{fill}">`, `type="button"` | every panel page, the accept page, `confirm.tsx`      |
+| `Button`        | `<button class="isa-btn isa-btn--{fill}">`, `type="button"`; a passed `class` is added to, never replaces | every panel page, the accept page, `confirm.tsx` |
+| `PageHead`      | `.isa-page-head`: the glyph on its tinted tile, "Shared albums", the household | panel, me, root                                  |
+| `LinkIcon`      | the addon's one glyph, `currentColor`                       | `PageHead`, the accept logo, the share banner         |
 | `Card`          | `<section class="isa-card isa-enter">` with an optional lede   | panel, me, root                                      |
 | `Setting`       | `<label class="isa-setting">` — text, description, control | panel `Settings.tsx`, me `App.tsx`                   |
 | `Switch`        | `<input type="checkbox" role="switch" class="isa-switch">` | panel `Settings.tsx`, me `App.tsx`                   |
 | `AlbumLink`     | `<a class="isa-album-link">` to `/albums/<albumId>`     | panel `SharedAlbums.tsx`, me `App.tsx`                 |
-| `Notice`        | `#notice`, the snackbar, `role=status`/`alert`            | me `App.tsx`, panel `App.tsx` and `LinkServer.tsx`     |
+| `Notice`        | `#notice`, the toast, `role=status`/`alert`               | me `App.tsx`, panel `App.tsx` and `LinkServer.tsx`     |
 | `useAnnouncer`  | the notice state, `announce()`, `dismiss()` and the success fade | me and panel, in place of two copies     |
 | `confirm.tsx`   | `Confirm` — the one dialog, `.isa-scrim` + `.isa-dialog`   | me, panel                                            |
 
 `Button`'s `fill` is the only knob: `filled`, `outlined`, `text`, `danger`, `dangerFilled`.
 Destructive in a list is `danger` (tonal) so a page of rows is not a wall of red; the filled
-`dangerFilled` is for a confirmation, where the action is the only thing on screen.
+`dangerFilled` is for a confirmation, where the action is the only thing on screen. Hover is a colour
+change on the fill (`color-mix` of the token at 80%, or 20% for the tints) — no lift, no state layer,
+no press animation.
 
 `Button` does **not** forward a `ref`. Preact hands a function component's ref its own wrapper, not
 the DOM node, and `confirm.tsx` — the one caller that needs the node, to take the caret — writes its
@@ -47,8 +72,10 @@ confirm button out as a host `<button>` instead. Anything else that needs the no
   element and no `div` with a click handler: the keyboard, the form and assistive technology get the
   control they already understand.
 - `role="switch"` is what announces it as on/off rather than checked/unchecked.
-- Track 52x32. Thumb 16 unselected and 24 selected, centred at Material's 16dp and 36dp; pressing
-  grows it to 28 about that same centre, so it never slides.
+- Track 52x32 with a 2px border, as Immich draws it. Off: `--isa-switch-track-off` fill, a visible
+  `--isa-switch-border-off` outline, a 16px `--isa-switch-thumb-off` thumb. On: a tinted
+  `--isa-switch-track-on` fill, no outline, a 24px primary thumb. The thumb's resting centres are 16px
+  and 36px from the left edge in every state.
 - The whole row is the target: `Setting` wraps the control in a `<label>`, so nobody has to hit 52
   pixels of switch.
 
@@ -63,15 +90,14 @@ confirm button out as a host `<button>` instead. Anything else that needs the no
 
 ## Motion
 
-- Two curves, Google's: `--isa-ease-standard` for anything that settles, `--isa-ease-emphasized`
-  for an entrance or a press that has to feel answered. Three durations: `--isa-duration-short`,
-  `-medium`, `-long`.
+- One curve, Tailwind's (`cubic-bezier(0.4, 0, 0.2, 1)`) — the one Immich's transitions use — held in
+  `--isa-ease-standard` and `--isa-ease-emphasized`, and three durations: `--isa-duration-short`
+  (100ms, the switch thumb), `-medium` (150ms, every colour change) and `-long` (250ms, an entrance).
 - Four arrivals — the card (`isa-rise-in`), the sheet (`isa-sheet-in`), the dialog (`isa-dialog-in`,
-  with its scrim's `isa-fade-in`) and the notice (`isa-notice-in`) — and one loop, the spinner
-  (`isa-spin`). Everything else arrives and is then still. The notice also leaves (`isa-notice-out`),
+  with its scrim's `isa-fade-in`) and the toast (`isa-notice-in`) — and one loop, the spinner
+  (`isa-spin`). Everything else arrives and is then still. The toast also leaves (`isa-notice-out`),
   in the direction it was swiped.
-- Buttons carry a state layer (`.isa-btn::after`, 8% hover / 12% pressed) rather than a colour swap;
-  the switch answers a press by growing both its thumb and its halo.
+- A control answers a press with a colour change only; nothing scales, lifts or ripples.
 - `prefers-reduced-motion: reduce` collapses all of it, scoped to `.isa-page` — the class
   `Document.tsx` puts on `<body>` — so the rule cannot reach the framed Immich page under the banner.
 
@@ -89,14 +115,14 @@ confirm button out as a host `<button>` instead. Anything else that needs the no
   peer) rather than beside it: two albums on one server can share a name, and a map keyed on the name
   links to whichever came last.
 
-## The snackbar
+## The toast
 
 - `Notice` is how **every** action reports: a card that writes its outcome into itself puts the
   message where the row it describes no longer is, and unlinking deletes that row.
 - It spans the gutter — `width`, not `max-width` — because a bar that hugs its words wraps a
   one-line outcome into six, and a phone is the only place it is read.
-- `--isa-notice-surface` is **dark in both schemes**, as Google Photos draws it. Inverting the page's
-  ink instead puts a glaring white box on a dark page.
+- `--isa-notice-surface` and `--isa-notice-ink` are the page's own surface and ink: Immich's toast is a
+  bordered card, with a 32px tile (`--isa-ok` or `--isa-danger`) saying what kind of message it is.
 - `useAnnouncer` numbers every announcement, and the `Notice` is keyed on that number: a second
   message REPLACES the first instead of inheriting whatever the first was doing on its way out —
   otherwise a bar mid-swipe takes the message that replaced it down with it.

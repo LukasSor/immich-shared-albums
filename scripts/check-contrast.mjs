@@ -14,7 +14,6 @@ const SHAPE = 3;
 const PAIRS = [
   ['ink', 'surface'],
   ['ink', 'sunken'],
-  ['ink', 'surface-sunken-strong'],
   ['ink', 'danger-surface'],
   ['ink-muted', 'surface'],
   ['ink-muted', 'sunken'],
@@ -29,6 +28,7 @@ const PAIRS = [
   // The switch's moving part against the track it moves on, in BOTH states: a shape, not a word.
   ['switch-thumb-off', 'switch-track-off', SHAPE],
   ['switch-thumb-on', 'switch-track-on', SHAPE],
+  ['switch-border-off', 'surface', SHAPE],
   ['notice-ink', 'notice-surface'],
 ];
 

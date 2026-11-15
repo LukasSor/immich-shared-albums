@@ -26,6 +26,7 @@ iframe.native-album {
   font-family: var(--isa-font);
   background: var(--isa-surface);
   color: var(--isa-ink);
+  border: 1px solid var(--isa-border);
   border-radius: var(--isa-radius-card);
   box-shadow: var(--isa-shadow-2);
   padding: var(--isa-pad-card);
@@ -63,9 +64,9 @@ iframe.native-album {
   place-items: center;
   width: 42px;
   height: 42px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--isa-accent), var(--isa-accent-2));
-  box-shadow: var(--isa-shadow-1);
+  border-radius: var(--isa-radius-md);
+  background: var(--isa-accent-container);
+  color: var(--isa-accent);
 }
 #immich-shared-albums-banner .logo svg {
   width: 22px;
@@ -75,7 +76,6 @@ iframe.native-album {
   margin: 0 0 var(--isa-space-1);
   font-size: 16px;
   font-weight: 600;
-  letter-spacing: -0.01em;
 }
 #immich-shared-albums-banner .sub {
   margin: 0;

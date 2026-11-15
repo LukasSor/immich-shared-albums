@@ -1,5 +1,6 @@
 /** web/ui/pages/share/Share.tsx — the join card floating over the framed native share page. See ../../../http-router.md. */
 import { useState } from 'preact/hooks';
+import { LinkIcon } from '../../lib/LinkIcon.tsx';
 
 // #immich-shared-albums-banner .card/input/button.join/.err are a TEST CONTRACT — the browser
 // lane drives this flow through them. Keep them.
@@ -94,18 +95,8 @@ export const Share = () => {
             &times;
           </button>
           <div class="row">
-            <div class="logo" aria-hidden="true">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="var(--isa-surface)"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7" />
-                <path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" />
-              </svg>
+            <div class="logo">
+              <LinkIcon />
             </div>
             <div>
               <h2>Join shared album with your server?</h2>

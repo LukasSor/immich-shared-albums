@@ -16,13 +16,13 @@ body {
   border-radius: var(--isa-radius-card);
   padding: var(--isa-pad-hero) var(--isa-pad-card);
   text-align: center;
+  border: 1px solid var(--isa-border);
   box-shadow: var(--isa-shadow-2);
   animation: isa-rise-in var(--isa-duration-long) var(--isa-ease-emphasized) both;
 }
 .card h1 {
   font-size: 20px;
   font-weight: 600;
-  letter-spacing: -0.02em;
   margin-bottom: var(--isa-space-2);
 }
 .card p {
@@ -38,15 +38,14 @@ body {
   min-height: var(--isa-touch);
   box-sizing: border-box;
   padding: 0 var(--isa-space-6);
-  border-radius: var(--isa-radius-pill);
+  border-radius: var(--isa-radius-md);
   background: var(--isa-accent);
   color: var(--isa-accent-ink);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   text-decoration: none;
-  box-shadow: var(--isa-shadow-1);
-  transition: box-shadow var(--isa-duration-short) var(--isa-ease-standard);
+  transition: background-color var(--isa-duration-medium) var(--isa-ease-standard);
 }
 .card a:hover {
-  box-shadow: var(--isa-shadow-2);
+  background: color-mix(in srgb, var(--isa-accent) 80%, transparent);
 }

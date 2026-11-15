@@ -4,6 +4,7 @@ import { followServerHints } from '../../lib/live.ts';
 import { useAnnouncer } from '../../lib/announce.ts';
 import { Card } from '../../lib/Card.tsx';
 import { Notice } from '../../lib/Notice.tsx';
+import { PageHead } from '../../lib/PageHead.tsx';
 import { Confirm, type Confirmation } from '../../lib/confirm.tsx';
 import { overview, unlinkPeer, ROUTE_PREFIX, type Overview, type Peer } from './api.ts';
 import { LinkServer } from './LinkServer.tsx';
@@ -73,9 +74,7 @@ export const App = () => {
   if (error) {
     return (
       <>
-        <div class="isa-page-head">
-          <h1 class="isa-page-title">🔗 Shared albums</h1>
-        </div>
+        <PageHead />
         <Card>Could not load: {error}. You may need to sign in to Immich as an admin.</Card>
       </>
     );
@@ -83,9 +82,7 @@ export const App = () => {
   if (!data) {
     return (
       <>
-        <div class="isa-page-head">
-          <h1 class="isa-page-title">🔗 Shared albums</h1>
-        </div>
+        <PageHead />
         <p class="isa-page-lede">Loading…</p>
       </>
     );
@@ -93,10 +90,7 @@ export const App = () => {
 
   return (
     <>
-      <div class="isa-page-head">
-        <h1 class="isa-page-title">🔗 Shared albums</h1>
-        <span class="isa-page-household">· {data.household.name}</span>
-      </div>
+      <PageHead household={data.household.name} />
       <p class="isa-page-lede">
         Server-side settings and pairings. <a href="/immich-shared-albums/me">Your own shared albums →</a>
       </p>
