@@ -7,5 +7,6 @@ pub mod contributors;
 pub mod materialise;
 pub mod migrate_domain;
 pub mod refs;
+pub mod sidecar;
 pub mod stand_in_picture;
 pub mod unmeasured;

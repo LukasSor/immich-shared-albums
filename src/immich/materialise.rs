@@ -1,7 +1,8 @@
 /** immich/materialise.rs — making a peer's photo a real row in this household's library. See ARCHITECTURE.md. */
-use crate::immich::client::{add_to_album, apply_ref_metadata, stub_jpeg, upload_asset, Client};
+use crate::immich::client::{add_to_album, stub_jpeg, upload_asset, Client};
 use crate::immich::contributors::ensure_contributor;
 use crate::immich::refs::AssetRef;
+use crate::immich::sidecar::xmp_sidecar;
 use crate::media::jpeg::jpeg_of_size;
 use crate::p2p::transport::transport;
 use crate::state::State;
@@ -391,6 +392,7 @@ pub(crate) async fn upload_as_contributor(
         &filename,
         &contributor_key,
         reference.taken_at.as_deref(),
+        xmp_sidecar(reference),
     )
     .await
     .map_err(|e| e.message())?;
@@ -410,7 +412,6 @@ pub(crate) async fn upload_as_contributor(
     )
     .await
     .map_err(|e| e.message())?;
-    apply_ref_metadata(client, &uploaded_id, reference, &contributor_key).await;
     Ok(uploaded_id)
 }
 

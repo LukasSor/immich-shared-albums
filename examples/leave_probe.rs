@@ -62,6 +62,7 @@ async fn main() {
             "leave-probe.jpg",
             &host_key,
             None,
+            None,
         )
         .await
         .expect("upload stub as the stand-in");

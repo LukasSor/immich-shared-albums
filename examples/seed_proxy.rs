@@ -58,7 +58,7 @@ async fn main() {
         .and_then(|a| a.get("id").and_then(|v| v.as_str()).map(str::to_string))
         .expect("album id");
 
-    let asset = upload_asset(&client, &stub_jpeg(), "proxy-stub.jpg", &key, None)
+    let asset = upload_asset(&client, &stub_jpeg(), "proxy-stub.jpg", &key, None, None)
         .await
         .expect("upload stub");
     let asset_id = asset

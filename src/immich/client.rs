@@ -664,6 +664,7 @@ pub async fn upload_asset(
     filename: &str,
     key: &str,
     taken_at: Option<&str>,
+    sidecar: Option<String>,
 ) -> Result<Value, ImmichError> {
     use sha1::{Digest, Sha1};
     let stamp = taken_at
@@ -681,12 +682,23 @@ pub async fn upload_asset(
             status: 0,
             body: e.to_string(),
         })?;
-    let form = reqwest::multipart::Form::new()
+    let mut form = reqwest::multipart::Form::new()
         .text("deviceAssetId", format!("isa-{digest}"))
         .text("deviceId", "immich-shared-albums")
         .text("fileCreatedAt", stamp.clone())
         .text("fileModifiedAt", stamp)
         .part("assetData", part);
+    if let Some(xmp) = sidecar {
+        let sidecar_part = reqwest::multipart::Part::text(xmp)
+            .file_name("sidecar.xmp")
+            .mime_str("application/xml")
+            .map_err(|e| ImmichError {
+                path: "/assets".into(),
+                status: 0,
+                body: e.to_string(),
+            })?;
+        form = form.part("sidecarData", sidecar_part);
+    }
     client.upload("/assets", key, form).await
 }
 
@@ -707,9 +719,6 @@ pub async fn add_to_album(
         .await
 }
 
-/// Apply what a ref knows onto the local asset. Every field is optional and the whole call is
-/// best-effort: metadata is decoration on a photo whose pixels are already correct, so a failure is
-/// logged rather than failing the materialisation.
 /// What a stub's description reads: the origin's own text, then the credit line — the one
 /// composition everywhere a description is written, so a refresh rebuilds exactly what
 /// materialise first wrote.
@@ -733,47 +742,4 @@ pub fn composed_description(reference: &crate::immich::refs::AssetRef) -> String
     .cloned()
     .collect::<Vec<_>>()
     .join("\n\n")
-}
-
-pub async fn apply_ref_metadata(
-    client: &Client,
-    asset_id: &str,
-    reference: &crate::immich::refs::AssetRef,
-    key: &str,
-) {
-    let mut meta = serde_json::Map::new();
-    if let Some(exif) = &reference.exif {
-        if let (Some(lat), Some(lon)) = (exif.latitude, exif.longitude) {
-            meta.insert("latitude".into(), serde_json::json!(lat));
-            meta.insert("longitude".into(), serde_json::json!(lon));
-        }
-        if let Some(rating) = exif.rating {
-            if rating != 0 {
-                meta.insert("rating".into(), serde_json::json!(rating));
-            }
-        }
-    }
-    // The credit names the person, so a viewer sees who a photo came from rather than an anonymous
-    // stub. A previous hop's credit line was already stripped when the ref was built.
-    let description = composed_description(reference);
-    if !description.is_empty() {
-        meta.insert("description".into(), serde_json::json!(description));
-    }
-    if let Some(taken_at) = &reference.taken_at {
-        meta.insert("dateTimeOriginal".into(), serde_json::json!(taken_at));
-    }
-    if meta.is_empty() {
-        return;
-    }
-    if let Err(e) = client
-        .json(
-            reqwest::Method::PUT,
-            &format!("/assets/{asset_id}"),
-            &Auth::Key(key),
-            Some(&Value::Object(meta)),
-        )
-        .await
-    {
-        crate::log!("metadata apply failed for {asset_id}: {e}");
-    }
 }
