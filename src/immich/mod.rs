@@ -9,4 +9,5 @@ pub mod migrate_domain;
 pub mod refs;
 pub mod sidecar;
 pub mod stand_in_picture;
+pub mod stub_refresh;
 pub mod unmeasured;

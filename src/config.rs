@@ -315,6 +315,59 @@ fn civil_from_unix(unix: i64) -> (i64, u32, u32, u32, u32, u32) {
     )
 }
 
+fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
+    let y = if month <= 2 { year - 1 } else { year };
+    let era = y.div_euclid(400);
+    let yoe = y.rem_euclid(400);
+    let mp = if month > 2 { month - 3 } else { month + 9 };
+    let doy = (153 * mp + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe - 719_468
+}
+
+pub fn unix_millis_from_iso(text: &str) -> Option<i128> {
+    let (date, rest) = text.split_once('T')?;
+    let mut date_parts = date.split('-').map(|part| part.parse::<i64>().ok());
+    let (year, month, day) = (
+        date_parts.next()??,
+        date_parts.next()??,
+        date_parts.next()??,
+    );
+    if date_parts.next().is_some() || !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+        return None;
+    }
+    let (clock, offset_minutes) = if let Some(clock) = rest.strip_suffix('Z') {
+        (clock, 0)
+    } else {
+        let split = rest.rfind(['+', '-'])?;
+        let (clock, offset) = rest.split_at(split);
+        let sign = if offset.starts_with('-') { -1 } else { 1 };
+        let (hours, minutes) = offset[1..].split_once(':')?;
+        (
+            clock,
+            sign * (hours.parse::<i64>().ok()? * 60 + minutes.parse::<i64>().ok()?),
+        )
+    };
+    let (whole, fraction) = clock.split_once('.').unwrap_or((clock, ""));
+    let mut clock_parts = whole.split(':').map(|part| part.parse::<i64>().ok());
+    let (hour, minute, second) = (
+        clock_parts.next()??,
+        clock_parts.next()??,
+        clock_parts.next()??,
+    );
+    if clock_parts.next().is_some() || hour > 23 || minute > 59 || second > 60 {
+        return None;
+    }
+    let millis = if fraction.is_empty() {
+        0
+    } else {
+        format!("{fraction:0<3}")[..3].parse::<i64>().ok()?
+    };
+    let seconds = days_from_civil(year, month, day) * 86_400 + hour * 3600 + minute * 60 + second
+        - offset_minutes * 60;
+    Some(i128::from(seconds) * 1000 + i128::from(millis))
+}
+
 pub const UTILITY_SUFFIX: &str = " (via shared albums)";
 
 /// Email domain for the bot users this addon creates. `.internal` is ICANN-reserved for
@@ -589,5 +642,36 @@ mod tests {
         for raw in ["$(rm -rf /):8300", "a b:8300", "host;ls:8300"] {
             assert_eq!(parse_advertise_addr(raw), None, "accepted {raw:?}");
         }
+    }
+}
+
+#[cfg(test)]
+mod iso_parse_tests {
+    use super::*;
+
+    #[test]
+    fn a_utc_stamp_round_trips_through_unix_millis() {
+        let stamp = "2024-05-01T12:30:00.250Z";
+        let millis = unix_millis_from_iso(stamp).unwrap();
+        assert_eq!(iso_from_unix_millis(millis as u128), stamp);
+    }
+
+    #[test]
+    fn an_offset_is_folded_into_the_instant() {
+        assert_eq!(
+            unix_millis_from_iso("2024-05-01T14:30:00+02:00"),
+            unix_millis_from_iso("2024-05-01T12:30:00Z")
+        );
+        assert_eq!(
+            unix_millis_from_iso("2024-05-01T12:30:00.000+00:00"),
+            unix_millis_from_iso("2024-05-01T12:30:00Z")
+        );
+    }
+
+    #[test]
+    fn text_that_is_not_a_stamp_is_not_an_instant() {
+        assert_eq!(unix_millis_from_iso(""), None);
+        assert_eq!(unix_millis_from_iso("yesterday"), None);
+        assert_eq!(unix_millis_from_iso("2024-13-01T00:00:00Z"), None);
     }
 }

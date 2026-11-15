@@ -48,7 +48,7 @@ picker, for the same reason. Known costs; do not make either worse without sayin
 | `immich/admin_key.rs` | the scoped admin-account key, and what it may never do |
 | `immich/bot_avatar.rs` | the hand-drawn PNG the addon's own accounts wear |
 | `immich/stand_in_picture.rs` | whose face an account of ours wears |
-| `immich/client.rs`, `contributors.rs`, `materialise.rs`, `refs.rs`, `sidecar.rs`, `unmeasured.rs` | the Immich API layer: transport, one account per remote person, stub materialisation, ref shapes, the stub metadata sidecar, unmeasured-photo holds |
+| `immich/client.rs`, `contributors.rs`, `materialise.rs`, `refs.rs`, `sidecar.rs`, `stub_refresh.rs`, `unmeasured.rs` | the Immich API layer: transport, one account per remote person, stub materialisation, ref shapes, the stub metadata sidecar, stub metadata refresh, unmeasured-photo holds |
 | `immich/migrate_domain.rs` | the legacy-domain rename at boot |
 | `media/cache.rs`, `jpeg.rs`, `proxy.rs` | the byte path: cache, the stub generator, the proxy that streams from owners |
 | `p2p/entitlement.rs` | what a linked household may reach |

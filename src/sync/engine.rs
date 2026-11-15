@@ -549,10 +549,11 @@ async fn reconcile_inner(
         }
     }
 
-    // DESCRIPTION REFRESH: an origin edit to a caption must reach the stubs that already exist —
-    // materialise wrote the description once, and nothing else would ever tell a stub its source's
-    // text changed. The version moved, so this pass is the moment to notice. The composition is
-    // the one materialise wrote (the origin's text plus the credit line); the ORIGIN's text wins,
+    // METADATA REFRESH: an origin edit to a caption, a place, a rating or a date must reach the
+    // stubs that already exist — materialise wrote them once, and nothing else would ever tell a
+    // stub its source changed. The version moved, so this pass is the moment to notice. The
+    // description is the composition materialise wrote (the origin's text plus the credit line);
+    // a field the origin no longer has is left as it is. The ORIGIN's values win,
     // because a stub is a proxy for their photo, not a fork of it. Only stubs, never full copies:
     // a stored-FULL copy may hold the household's own edits and holds real bytes besides.
     if version.is_some() && consistent {
@@ -579,22 +580,15 @@ async fn reconcile_inner(
                     None,
                 )
                 .await
-                .map(|a| {
-                    a.and_then(|a| {
-                        a.pointer("/exifInfo/description")
-                            .and_then(|v| v.as_str())
-                            .map(str::to_string)
-                    })
-                    .unwrap_or_default()
-                })
+                .map(|asset| asset.unwrap_or_default())
             else {
                 // The stub is gone or unreadable: there is nothing to refresh, and a PUT would
-                // refuse the same way every pass for ever. Its description lands when the stub is
+                // refuse the same way every pass for ever. Its metadata lands when the stub is
                 // re-materialised, which sets the fresh one at creation.
                 continue;
             };
-            let wanted = crate::immich::client::composed_description(reference);
-            if wanted == current {
+            let update = crate::immich::stub_refresh::stub_metadata_update(reference, &current);
+            if update.is_empty() {
                 continue;
             }
             match client
@@ -602,24 +596,21 @@ async fn reconcile_inner(
                     reqwest::Method::PUT,
                     &format!("/assets/{}", entry.local_asset),
                     &stub_auth,
-                    Some(&serde_json::json!({ "description": wanted })),
+                    Some(&serde_json::Value::Object(update)),
                 )
                 .await
             {
-                Ok(_) => crate::log!(
-                    "refreshed a stub's description in \"{}\"",
-                    mapping.album_name
-                ),
+                Ok(_) => crate::log!("refreshed a stub's metadata in \"{}\"", mapping.album_name),
                 // A 4xx is the credential's answer, not a transient fault: the access is gone or
                 // the state changed permanently. Retrying it every pass held the cursor so the
                 // mapping never settled and the pass never got cheap.
                 Err(e) if e.is_not_visible() => crate::log!(
-                    "description refresh refused for {}: {e} — not retried",
+                    "metadata refresh refused for {}: {e} — not retried",
                     short_id(&entry.local_asset)
                 ),
                 Err(e) => {
                     crate::log!(
-                        "description refresh failed for {}: {e}",
+                        "metadata refresh failed for {}: {e}",
                         short_id(&entry.local_asset)
                     );
                     all_ok = false; // the cursor must not advance past a refresh that did not land
