@@ -170,6 +170,8 @@ it is.
 | `/events` | GET | signed in | SSE hints: `{type}` of `invitations`/`index`/`shares` |
 | `/peers` | GET | admin | one row per link, with what it carries |
 | `/settings` | GET, POST | admin | |
+| `/duplicates` | GET | admin | what a cleanup would remove; changes nothing |
+| `/duplicates/clean` | POST | admin | removes up to 50 duplicate mirror albums, found by a fresh scan |
 | `/pairings` | GET, POST | admin | mint a link, list pending |
 | `/pairings/revoke` | POST | admin | |
 | `/pair` | POST | admin | redeem a pairing link |

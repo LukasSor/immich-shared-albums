@@ -9,6 +9,7 @@ pub mod audit;
 pub mod backfill;
 pub mod comments;
 pub mod directory;
+pub mod duplicate_mirrors;
 pub mod engine;
 pub mod host_keys;
 pub mod house_bot;

@@ -270,12 +270,24 @@ pub fn short_id(id: &str) -> &str {
 
 /// RFC3339 UTC with milliseconds, matching the timestamp shape the e2e suite parses.
 pub fn iso_now() -> String {
-    let now = std::time::SystemTime::now()
+    iso_from_unix_millis(unix_millis_now())
+}
+
+pub fn iso_seconds_ago(seconds: u64) -> String {
+    iso_from_unix_millis(unix_millis_now().saturating_sub(u128::from(seconds) * 1000))
+}
+
+fn unix_millis_now() -> u128 {
+    std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default();
-    let secs = now.as_secs();
-    let millis = now.subsec_millis();
-    let (y, mo, d, h, mi, s) = civil_from_unix(secs as i64);
+        .unwrap_or_default()
+        .as_millis()
+}
+
+pub fn iso_from_unix_millis(unix_millis: u128) -> String {
+    let secs = (unix_millis / 1000) as i64;
+    let millis = unix_millis % 1000;
+    let (y, mo, d, h, mi, s) = civil_from_unix(secs);
     format!("{y:04}-{mo:02}-{d:02}T{h:02}:{mi:02}:{s:02}.{millis:03}Z")
 }
 
@@ -409,6 +421,30 @@ pub fn install_test_config() {
             test_hooks: false,
         });
     });
+}
+
+#[cfg(test)]
+mod iso_tests {
+    use super::*;
+
+    #[test]
+    fn the_unix_epoch_is_written_in_the_shape_immich_uses() {
+        assert_eq!(iso_from_unix_millis(0), "1970-01-01T00:00:00.000Z");
+    }
+
+    #[test]
+    fn a_known_instant_is_written_with_its_milliseconds() {
+        assert_eq!(
+            iso_from_unix_millis(1_700_000_000_123),
+            "2023-11-14T22:13:20.123Z"
+        );
+    }
+
+    #[test]
+    fn earlier_instants_sort_before_later_ones_as_text() {
+        assert!(iso_from_unix_millis(1_700_000_000_000) < iso_from_unix_millis(1_700_000_000_001));
+        assert!(iso_from_unix_millis(999_999_999_999) < iso_from_unix_millis(1_000_000_000_000));
+    }
 }
 
 #[cfg(test)]

@@ -616,6 +616,7 @@ pub async fn pull_invitations_now(state: &State, client: &Client) {
             break;
         }
     }
+    crate::sync::duplicate_mirrors::sweep_if_enabled(state, client).await;
 }
 
 /// The same pull, without waiting for it: unawaited, because the route answering a nudge must not

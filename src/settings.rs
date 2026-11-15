@@ -18,6 +18,8 @@ pub struct Settings {
     pub pairing_ttl_minutes: i64,
     /// Store mirrored photos as full local copies instead of hotlink stubs.
     pub store_shared_assets_locally: bool,
+    /// Delete duplicate mirror albums on its own. OFF unless an admin turns it on: it deletes albums.
+    pub remove_duplicate_mirrors_automatically: bool,
 }
 
 impl Default for Settings {
@@ -26,6 +28,7 @@ impl Default for Settings {
             share_link_join: true,
             pairing_ttl_minutes: DEFAULT_TTL_MINUTES,
             store_shared_assets_locally: false,
+            remove_duplicate_mirrors_automatically: false,
         }
     }
 }
@@ -50,6 +53,9 @@ impl Settings {
             store_shared_assets_locally: get("storeSharedAssetsLocally")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false),
+            remove_duplicate_mirrors_automatically: get("removeDuplicateMirrorsAutomatically")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
         }
     }
 
@@ -61,6 +67,7 @@ impl Settings {
                 "shareLinkJoin": self.share_link_join,
                 "pairingTtlMinutes": self.pairing_ttl_minutes,
                 "storeSharedAssetsLocally": self.store_shared_assets_locally,
+                "removeDuplicateMirrorsAutomatically": self.remove_duplicate_mirrors_automatically,
             }),
         )
     }
@@ -85,6 +92,22 @@ mod tests {
         assert!(s.share_link_join, "share links default ON");
         assert_eq!(s.pairing_ttl_minutes, DEFAULT_TTL_MINUTES);
         assert!(!s.store_shared_assets_locally, "local copies default OFF");
+        assert!(
+            !s.remove_duplicate_mirrors_automatically,
+            "automatic duplicate cleanup defaults OFF"
+        );
+    }
+
+    #[test]
+    fn automatic_cleanup_stays_off_when_the_row_never_mentioned_it() {
+        let store = store();
+        store
+            .kv_set(
+                "settings",
+                &serde_json::json!({"shareLinkJoin": true, "storeSharedAssetsLocally": true}),
+            )
+            .unwrap();
+        assert!(!Settings::read(&store).remove_duplicate_mirrors_automatically);
     }
 
     #[test]
@@ -94,6 +117,7 @@ mod tests {
             share_link_join: false,
             pairing_ttl_minutes: 60,
             store_shared_assets_locally: true,
+            remove_duplicate_mirrors_automatically: true,
         };
         wanted.write(&store).unwrap();
         assert_eq!(Settings::read(&store), wanted);
@@ -127,5 +151,6 @@ mod tests {
         assert!(raw.get("shareLinkJoin").is_some());
         assert!(raw.get("pairingTtlMinutes").is_some());
         assert!(raw.get("storeSharedAssetsLocally").is_some());
+        assert!(raw.get("removeDuplicateMirrorsAutomatically").is_some());
     }
 }

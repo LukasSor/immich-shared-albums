@@ -177,6 +177,8 @@ pub async fn serve(req: Request) -> Response {
         (Method::GET, "/peers") => return peers(&headers).await,
         (Method::GET, "/settings") => return settings_get(&headers).await,
         (Method::POST, "/settings") => return settings_post(&headers, body).await,
+        (Method::GET, "/duplicates") => return duplicates_scan(&headers).await,
+        (Method::POST, "/duplicates/clean") => return duplicates_clean(&headers).await,
         (Method::GET, "/pairings") => return pairings_list(&headers).await,
         (Method::POST, "/pairings") => return pairing_mint(&headers).await,
         (Method::POST, "/pairings/revoke") => return pairing_revoke(&headers, body).await,
@@ -307,6 +309,8 @@ struct SettingsPatch {
     pairing_ttl_minutes: Option<i64>,
     #[serde(default)]
     store_shared_assets_locally: bool,
+    #[serde(default)]
+    remove_duplicate_mirrors_automatically: bool,
 }
 
 fn share_link_join_default() -> bool {
@@ -342,6 +346,7 @@ async fn settings_post(headers: &HeaderMap, body: HttpBody) -> Response {
         share_link_join: asked.share_link_join,
         pairing_ttl_minutes: ttl,
         store_shared_assets_locally: asked.store_shared_assets_locally,
+        remove_duplicate_mirrors_automatically: asked.remove_duplicate_mirrors_automatically,
     };
     if let Err(e) = wanted.write(&state().store) {
         return json_response(
@@ -350,6 +355,51 @@ async fn settings_post(headers: &HeaderMap, body: HttpBody) -> Response {
         );
     }
     json_response(StatusCode::OK, settings_json())
+}
+
+/// `GET /duplicates` — what a cleanup would remove, without removing anything.
+async fn duplicates_scan(headers: &HeaderMap) -> Response {
+    if let Some(refusal) = admin_refusal(headers, "scan for duplicate albums").await {
+        return refusal;
+    }
+    let found =
+        crate::sync::duplicate_mirrors::scan(state(), crate::immich::client::shared()).await;
+    json_response(
+        StatusCode::OK,
+        json!({
+            "duplicates": found
+                .iter()
+                .map(|duplicate| json!({
+                    "albumId": duplicate.id,
+                    "name": duplicate.name,
+                    "owner": duplicate.owner_name,
+                    "createdAt": duplicate.created_at,
+                }))
+                .collect::<Vec<_>>(),
+        }),
+    )
+}
+
+/// `POST /duplicates/clean` — scans again and removes what it finds, never a list the caller sent.
+async fn duplicates_clean(headers: &HeaderMap) -> Response {
+    if let Some(refusal) = admin_refusal(headers, "remove duplicate albums").await {
+        return refusal;
+    }
+    let client = crate::immich::client::shared();
+    let found = crate::sync::duplicate_mirrors::scan(state(), client).await;
+    let (batch, held_back) = crate::sync::duplicate_mirrors::take_batch(
+        found,
+        crate::sync::duplicate_mirrors::MANUAL_BATCH,
+    );
+    let outcome = crate::sync::duplicate_mirrors::remove(state(), client, &batch).await;
+    json_response(
+        StatusCode::OK,
+        json!({
+            "removed": outcome.removed,
+            "failed": outcome.failed,
+            "heldBack": held_back,
+        }),
+    )
 }
 
 /// Read a JSON body under `ISA_MAX_BODY_KB`, answering the same 413 the TypeScript does. The ONE
@@ -377,6 +427,7 @@ fn settings_json() -> Value {
         "shareLinkJoin": current.share_link_join,
         "pairingTtlMinutes": current.pairing_ttl_minutes,
         "storeSharedAssetsLocally": current.store_shared_assets_locally,
+        "removeDuplicateMirrorsAutomatically": current.remove_duplicate_mirrors_automatically,
     })
 }
 
