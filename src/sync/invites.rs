@@ -725,6 +725,7 @@ async fn pull_invitations_once(state: &State, client: &Client) {
                             .await;
                         }
                     }
+                    refresh_owner_picture(state, client, &known, &peer).await;
                 }
                 continue;
             }
@@ -965,6 +966,27 @@ async fn offered_albums(
     OfferViews {
         offered,
         fetched: true,
+    }
+}
+
+async fn refresh_owner_picture(state: &State, client: &Client, mirror: &Mapping, peer: &Peer) {
+    let Some(owner_id) = mirror.album_owner_id.as_deref() else {
+        return;
+    };
+    let stand_in = state
+        .collections()
+        .contributors
+        .get(&format!("{}{owner_id}", crate::config::bot_prefix::PERSON))
+        .cloned();
+    if let Some(stand_in) = stand_in {
+        crate::immich::contributors::sync_avatar(
+            state,
+            client,
+            &stand_in,
+            Some(peer),
+            Some(owner_id),
+        )
+        .await;
     }
 }
 

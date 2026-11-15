@@ -593,7 +593,8 @@ pub async fn sync_avatar(
     else {
         return;
     };
-    if contributor.avatar_done {
+    if contributor.avatar_done && !crate::immich::avatar_refresh::recheck_due(&contributor.user_id)
+    {
         return;
     }
     // Empty = no key minted yet; the avatar waits for the retry that mints it.
@@ -616,6 +617,7 @@ pub async fn sync_avatar(
         }
     };
     if head.status >= 400 {
+        crate::immich::avatar_refresh::remember(&contributor.user_id, "none");
         // Not an error: most people have no picture, and their stand-in wears Immich's own initial.
         crate::trace!(
             "\"{origin_user_id}\" has no picture on \"{}\" ({})",
@@ -630,6 +632,11 @@ pub async fn sync_avatar(
         crate::log!(
             "the picture for \"{origin_user_id}\" is over 8MB — not a picture, refusing it"
         );
+        return;
+    }
+    let digest = crate::immich::avatar_refresh::digest_of(&body);
+    if !crate::immich::avatar_refresh::picture_changed(&contributor.user_id, &digest) {
+        crate::immich::avatar_refresh::remember(&contributor.user_id, &digest);
         return;
     }
     let content_type = head
@@ -648,6 +655,7 @@ pub async fn sync_avatar(
     {
         Ok(()) => {
             // Only stop retrying once an avatar actually landed.
+            crate::immich::avatar_refresh::remember(&contributor.user_id, &digest);
             mark_avatar_done(state, contributor);
             crate::log!(
                 "gave the stand-in of \"{origin_user_id}\" the picture their server has for them"

@@ -1,6 +1,7 @@
 /** immich/mod.rs — the local Immich API layer. See ARCHITECTURE.md. */
 pub mod access;
 pub mod admin_key;
+pub mod avatar_refresh;
 pub mod bot_avatar;
 pub mod client;
 pub mod contributors;
