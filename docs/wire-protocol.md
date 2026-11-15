@@ -55,6 +55,12 @@ field, so an older build stays wire-identical rather than gaining a field it doe
 (evolution rule 1). It is a category, not a permission — the local mapping is an ordinary member
 mirror either way, and nothing about access changes because of it.
 
+**The album's description and cover travel with the invitation.** `/invitations` entries carry
+`album.description` and `album.coverAsset` (the origin's asset id, which the receiver maps to its stub
+through the ledger), each present only when non-empty, so an older peer neither sends nor needs them.
+The receiver applies a description when it differs from the last one it applied and a cover once the
+stub for that asset exists; an origin that clears its cover leaves the mirror's as it is.
+
 **The receiver reports the reunion back** with `POST /albums/:mappingId/reunified`
 (`handleReunified`), addressed by the origin's mapping id, its album id, or the id the origin sent —
 whichever the caller has. It is a fact, not a command: nothing about the origin's own album changes

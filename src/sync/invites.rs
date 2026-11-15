@@ -67,6 +67,7 @@ pub struct Invited {
     pub permissions: String,
     pub owner_name: Option<String>,
     pub owner_id: Option<String>,
+    pub details: crate::sync::album_details::AlbumDetails,
 }
 
 pub async fn albums_as_marker(
@@ -124,6 +125,7 @@ pub async fn albums_as_marker(
                     .and_then(|o| o.pointer("/user/id"))
                     .and_then(|v| v.as_str())
                     .map(str::to_string),
+                details: crate::sync::album_details::details_of_album(album),
             },
         );
     }
@@ -257,6 +259,13 @@ pub async fn detect_invites_once(state: &State, client: &Client) -> usize {
             let for_peer_user_ids = invitees.get(album_id).cloned().unwrap_or_default();
             if for_peer_user_ids.is_empty() {
                 continue; // invited nobody we can name — nothing to offer
+            }
+            if crate::sync::album_details::record_offer(
+                &peer.pub_key,
+                album_id,
+                entry.details.clone(),
+            ) {
+                nudge_peer_invitations(&peer);
             }
             let existing = state
                 .collections()
@@ -725,6 +734,13 @@ async fn pull_invitations_once(state: &State, client: &Client) {
                             .await;
                         }
                     }
+                    crate::sync::album_details::apply_to_mirror(
+                        state,
+                        client,
+                        &known,
+                        &crate::sync::album_details::details_of_offer(invitation),
+                    )
+                    .await;
                     refresh_owner_picture(state, client, &known, &peer).await;
                 }
                 continue;
@@ -1010,6 +1026,10 @@ pub fn invitations_for(state: &State, peer_pub: &str) -> Vec<Value> {
                 },
                 "forUserIds": m.for_peer_user_ids.clone().unwrap_or_default(),
             });
+            crate::sync::album_details::put_on_offer(
+                &mut entry["album"],
+                &crate::sync::album_details::offered(&m.peer, &m.album_id),
+            );
             // Same ADDITIVE shape as the redeem answer: present only when it is a reunion, so an
             // ordinary invitation simply omits the key and "absent" keeps meaning "ordinary".
             if m.reunified == Some(true) {
