@@ -2273,11 +2273,11 @@ stage('security (utility accounts cannot be signed into)');
   const contributors = readSidecarContributors('b-sidecar');
   if (contributors) {
     const entries = Object.values(contributors);
-    const withPassword = entries.filter((c) => c.password).length;
+    const retained = entries.filter((c) => c.password).length;
     check('utility accounts were actually provisioned with keys', entries.length > 0 && entries.every((c) => c.apiKey),
           `${entries.length} contributor(s)`);
     check('no utility login password is retained in state.db once provisioned',
-          withPassword === 0, `${withPassword} of ${entries.length} still stored`);
+          retained === 0, `${retained} of ${entries.length} still stored`);
   } else console.log('  (skipped password-retention check: cannot read demo/b-sidecar/state.db)');
 }
 
@@ -2739,6 +2739,10 @@ stage('rust: minting a key never clobbers the password-login setting');
     const cfg = await (await fetch(`${A}/api/system-config`, { headers: { 'x-api-key': AKEY } })).json();
     return cfg?.passwordLogin?.enabled;
   };
+  const loginLabel = async () => {
+    const enabled = await readLogin();
+    return enabled === true ? 'on' : enabled === false ? 'off' : 'unknown';
+  };
   const writeLogin = async (on) => {
     const cfg = await (await fetch(`${A}/api/system-config`, { headers: { 'x-api-key': AKEY } })).json();
     cfg.passwordLogin.enabled = on;
@@ -2749,7 +2753,7 @@ stage('rust: minting a key never clobbers the password-login setting');
   };
 
   check('rig: C starts hardened, so the borrow path is the one under test', (await readLogin()) === false,
-        `passwordLogin=${await readLogin()}`);
+        `login ${await loginLabel()}`);
   const enabled = await writeLogin(true);
   check('rig: an operator turns password login on', enabled && (await readLogin()) === true);
 
@@ -2779,7 +2783,7 @@ stage('rust: minting a key never clobbers the password-login setting');
         provisionedOnC ? '' : 'no contributed stub appeared on C within 4 min');
 
   check('THE OPERATOR\u2019S PASSWORD LOGIN SURVIVES THE PROVISIONING', (await readLogin()) === true,
-        `passwordLogin=${await readLogin()} after minting a key`);
+        `login ${await loginLabel()} after minting a key`);
 
   // Put the hardening back: the rest of the rig (and the browser lane) expects a production-like C.
   await writeLogin(false);
