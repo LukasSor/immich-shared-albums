@@ -18,6 +18,7 @@ export const Settings = () => {
   const [pairingTtl, setPairingTtl] = useState(15);
   const [storeLocal, setStoreLocal] = useState(false);
   const [autoRemoveDuplicates, setAutoRemoveDuplicates] = useState(false);
+  const [acceptRenames, setAcceptRenames] = useState(false);
 
   const load = () =>
     getSettings().then(v => {
@@ -25,6 +26,7 @@ export const Settings = () => {
       setPairingTtl(v.pairingTtlMinutes || 15);
       setStoreLocal(v.storeSharedAssetsLocally);
       setAutoRemoveDuplicates(v.removeDuplicateMirrorsAutomatically);
+      setAcceptRenames(v.acceptMirrorRenames);
     });
   useEffect(() => {
     load().catch(() => setShareLinkJoin(true));
@@ -40,6 +42,7 @@ export const Settings = () => {
     pairingTtlMinutes: pairingTtl,
     storeSharedAssetsLocally: storeLocal,
     removeDuplicateMirrorsAutomatically: autoRemoveDuplicates,
+    acceptMirrorRenames: acceptRenames,
   });
   const toggleJoin = (next: boolean) => {
     setShareLinkJoin(next);
@@ -58,6 +61,11 @@ export const Settings = () => {
   const toggleAutoRemove = (next: boolean) => {
     setAutoRemoveDuplicates(next);
     void persist({ ...base(), removeDuplicateMirrorsAutomatically: next });
+  };
+
+  const toggleAcceptRenames = (next: boolean) => {
+    setAcceptRenames(next);
+    void persist({ ...base(), acceptMirrorRenames: next });
   };
 
   return (
@@ -79,6 +87,12 @@ export const Settings = () => {
         description="Off by default. On, duplicate mirror albums are deleted in the background, at most five every ten minutes. Use the scan below to see what would go first."
       >
         <Switch id="auto-remove-duplicates" checked={autoRemoveDuplicates} onChange={toggleAutoRemove} />
+      </Setting>
+      <Setting
+        label="Experimental: accept album renames from linked servers"
+        description="Off by default. On, someone who can edit a shared album on a linked server can rename your album from their copy. Only albums you shared by invitation with edit rights, and if you rename it too, your name wins."
+      >
+        <Switch id="accept-mirror-renames" checked={acceptRenames} onChange={toggleAcceptRenames} />
       </Setting>
       <Setting label="Pairing links stay valid for" description="Shown once. Create another if it is lost.">
         <select class="isa-field" value={pairingTtl} onChange={changeTtl}>

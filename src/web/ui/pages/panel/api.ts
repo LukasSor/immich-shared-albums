@@ -42,6 +42,7 @@ export type Settings = {
   pairingTtlMinutes: number;
   storeSharedAssetsLocally: boolean;
   removeDuplicateMirrorsAutomatically: boolean;
+  acceptMirrorRenames: boolean;
 };
 export const getSettings = () => json('/settings') as Promise<Settings>;
 export const saveSettings = (next: Settings) => post('/settings', next) as Promise<Settings>;
