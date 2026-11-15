@@ -76,6 +76,14 @@ had, and the mirror the receiver re-creates after the undo is born carrying the 
 hides that mirror's own controls. Its own route rather than a body on the one above, so an origin
 that knows only `/reunified` is never sent something it would read as the reunion still being on.
 
+**An experimental rename, mirror to origin.** `POST /albums/:mappingId/rename` with `{ "name" }` tells the
+origin that someone here renamed the mirror. The origin answers 403 `renames_not_accepted` unless its
+admin switched on *accept album renames from linked servers*, 403 `view_only` for a share that does not
+let people edit, and 200 once it has renamed its own album as one of that server's people who may edit
+it. Only an album shared by invitation has a route to the origin; a name the origin changed itself in the
+meantime wins and nothing is sent. An older peer has no such route and answers 404, which the sender
+treats as a refusal.
+
 **It restores BOTH albums, and either half may send it.** A reunion merged both ways, so each album
 holds the other's half as stubs, and only the household that owns an album may take them back out.
 The sender gives its own back first — `leave::restore_shared_album` on an owner mapping,

@@ -722,18 +722,28 @@ async fn pull_invitations_once(state: &State, client: &Client) {
                         .pointer("/album/name")
                         .and_then(|v| v.as_str())
                         .unwrap_or_default();
+                    let mut origin_renamed = false;
                     if !origin_name.is_empty() {
                         let wanted =
                             crate::sync::mirror::mirror_album_name(origin_name, &peer.name);
                         if crate::sync::album_rename::name_change(&known.album_name, &wanted)
                             .is_some()
                         {
+                            origin_renamed = true;
                             crate::sync::album_rename::rename_mirror(
                                 state, client, &known, &wanted,
                             )
                             .await;
                         }
                     }
+                    crate::sync::mirror_rename::report_local_rename(
+                        state,
+                        client,
+                        &known,
+                        &peer,
+                        origin_renamed,
+                    )
+                    .await;
                     crate::sync::album_details::apply_to_mirror(
                         state,
                         client,
