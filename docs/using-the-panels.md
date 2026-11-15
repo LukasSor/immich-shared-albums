@@ -57,6 +57,13 @@ to compare; a name can be wrong, which is why the action is reversible.
 - **Connected servers** — who you are linked to, and unlink.
 - **Shared albums** — the albums currently crossing servers.
 - **Settings** — how long pairing codes stay valid, whether shared links may be joined, and the rest.
+  - **Remove duplicate albums automatically** is **off** unless you turn it on. On, duplicate mirror
+    albums are deleted in the background, at most five every ten minutes.
+- **Duplicate albums** — **Scan for duplicates** lists the mirror albums that nothing tracks any more
+  and that sit beside the live copy of the same share, and changes nothing. **Remove** deletes
+  exactly that list (up to 50) after a confirmation. An album is only ever listed when it is owned by
+  one of the addon's own stand-in accounts and is at least ten minutes old; your own albums and every
+  photo stay.
 
 ## Sharing an album (where it actually happens)
 

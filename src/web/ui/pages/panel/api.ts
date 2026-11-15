@@ -41,6 +41,12 @@ export type Settings = {
   shareLinkJoin: boolean;
   pairingTtlMinutes: number;
   storeSharedAssetsLocally: boolean;
+  removeDuplicateMirrorsAutomatically: boolean;
 };
 export const getSettings = () => json('/settings') as Promise<Settings>;
 export const saveSettings = (next: Settings) => post('/settings', next) as Promise<Settings>;
+
+export type DuplicateAlbum = { albumId: string; name: string; owner: string; createdAt: string };
+export const scanDuplicates = () => json('/duplicates') as Promise<{ duplicates: DuplicateAlbum[] }>;
+export const cleanDuplicates = () =>
+  post('/duplicates/clean') as Promise<{ removed: number; failed: number; heldBack: number }>;

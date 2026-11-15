@@ -10,6 +10,7 @@ import { overview, unlinkPeer, ROUTE_PREFIX, type Overview, type Peer } from './
 import { LinkServer } from './LinkServer.tsx';
 import { ConnectedServers } from './ConnectedServers.tsx';
 import { SharedAlbums } from './SharedAlbums.tsx';
+import { Duplicates } from './Duplicates.tsx';
 import { Settings } from './Settings.tsx';
 
 export const App = () => {
@@ -98,6 +99,7 @@ export const App = () => {
       <SharedAlbums albums={data.albums} onDenied={refuseAlbum} />
       <ConnectedServers peers={data.peers} onUnlink={unlink} unlinking={unlinking} />
       <Settings />
+      <Duplicates onOutcome={announce} onConfirm={setAsking} />
       <Confirm ask={asking} onClose={() => setAsking(null)} />
     </Shell>
   );

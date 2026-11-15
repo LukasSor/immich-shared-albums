@@ -17,12 +17,14 @@ export const Settings = () => {
   const [shareLinkJoin, setShareLinkJoin] = useState<boolean | null>(null);
   const [pairingTtl, setPairingTtl] = useState(15);
   const [storeLocal, setStoreLocal] = useState(false);
+  const [autoRemoveDuplicates, setAutoRemoveDuplicates] = useState(false);
 
   const load = () =>
     getSettings().then(v => {
       setShareLinkJoin(v.shareLinkJoin);
       setPairingTtl(v.pairingTtlMinutes || 15);
       setStoreLocal(v.storeSharedAssetsLocally);
+      setAutoRemoveDuplicates(v.removeDuplicateMirrorsAutomatically);
     });
   useEffect(() => {
     load().catch(() => setShareLinkJoin(true));
@@ -37,6 +39,7 @@ export const Settings = () => {
     shareLinkJoin: shareLinkJoin as boolean,
     pairingTtlMinutes: pairingTtl,
     storeSharedAssetsLocally: storeLocal,
+    removeDuplicateMirrorsAutomatically: autoRemoveDuplicates,
   });
   const toggleJoin = (next: boolean) => {
     setShareLinkJoin(next);
@@ -52,6 +55,11 @@ export const Settings = () => {
     void persist({ ...base(), storeSharedAssetsLocally: next });
   };
 
+  const toggleAutoRemove = (next: boolean) => {
+    setAutoRemoveDuplicates(next);
+    void persist({ ...base(), removeDuplicateMirrorsAutomatically: next });
+  };
+
   return (
     <Section title="Settings" icon="cogOutline">
       <Setting
@@ -65,6 +73,12 @@ export const Settings = () => {
         description="Off, they stream from their owner and use no space here. On, they are copied over in the background and use real disk space. Turning this off does not remove copies already made."
       >
         <Switch id="store-locally" checked={storeLocal} onChange={toggleStore} />
+      </Setting>
+      <Setting
+        label="Remove duplicate albums automatically"
+        description="Off by default. On, duplicate mirror albums are deleted in the background, at most five every ten minutes. Use the scan below to see what would go first."
+      >
+        <Switch id="auto-remove-duplicates" checked={autoRemoveDuplicates} onChange={toggleAutoRemove} />
       </Setting>
       <Setting label="Pairing links stay valid for" description="Shown once. Create another if it is lost.">
         <select class="isa-field" value={pairingTtl} onChange={changeTtl}>
