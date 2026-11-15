@@ -59,10 +59,10 @@ to compare; a name can be wrong, which is why the action is reversible.
 - **Settings** — how long pairing codes stay valid, whether shared links may be joined, and the rest.
   - **Remove duplicate albums automatically** is **off** unless you turn it on. On, duplicate mirror
     albums are deleted in the background, at most five every ten minutes.
-  - **Experimental: accept album renames from linked servers** is **off** unless you turn it on. On,
-    someone who can edit a shared album on a linked server can rename your album from their copy. It
-    only applies to albums you shared by invitation with edit rights, and a name you changed yourself
-    meanwhile wins.
+  - **Experimental: accept album edits from linked servers** is **off** unless you turn it on. On,
+    someone who can edit a shared album on a linked server can change its name, description or cover
+    from their copy. It only applies to albums you shared by invitation with edit rights, and a change
+    you make yourself to the same thing wins.
 - **Duplicate albums** — **Scan for duplicates** lists the mirror albums that nothing tracks any more
   and that sit beside the live copy of the same share, and changes nothing. **Remove** deletes
   exactly that list (up to 50) after a confirmation. An album is only ever listed when it is owned by

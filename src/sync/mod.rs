@@ -23,7 +23,7 @@ pub mod leave;
 pub mod link_grants;
 pub mod matches;
 pub mod mirror;
-pub mod mirror_rename;
+pub mod mirror_edits;
 pub mod peer_mapping_id;
 pub mod permissions;
 pub mod reclaim;

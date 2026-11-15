@@ -129,9 +129,9 @@ async fn route(caller: &str, header: &RequestHeader, body: &[u8]) -> PeerAnswer 
         // The same fact withdrawn. Its own arm, not a payload on the one above: the two are separate
         // moments on the wire and an older peer that knows only `/reunified` must not be sent a body
         // it would read as the reunion still being on.
-        p if p.ends_with("/rename") => {
-            let id = album_mapping_id(p, "/rename");
-            let (status, value) = crate::sync::mirror_rename::handle_rename(
+        p if p.ends_with("/edit") => {
+            let id = album_mapping_id(p, "/edit");
+            let (status, value) = crate::sync::mirror_edits::handle_edit(
                 crate::state::state(),
                 crate::immich::client::shared(),
                 caller,

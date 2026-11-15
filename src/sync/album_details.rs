@@ -20,6 +20,7 @@ type OfferKey = (String, String);
 struct Applied {
     description: Option<String>,
     cover: Option<String>,
+    cover_local: Option<String>,
 }
 
 static OFFERED: Mutex<Option<HashMap<OfferKey, AlbumDetails>>> = Mutex::new(None);
@@ -100,7 +101,24 @@ fn applied_state(mirror_id: &str) -> (Option<String>, Option<String>) {
         .unwrap_or_default()
 }
 
-fn mark_applied(mirror_id: &str, description: Option<&str>, cover: Option<&str>) {
+pub fn alignment(mirror_id: &str, offered: &AlbumDetails) -> (bool, bool, Option<String>) {
+    let applied = APPLIED.lock().unwrap_or_else(|e| e.into_inner());
+    let Some(entry) = applied.as_ref().and_then(|applied| applied.get(mirror_id)) else {
+        return (offered.description.is_empty(), false, None);
+    };
+    let description_aligned = match &entry.description {
+        Some(description) => *description == offered.description,
+        None => offered.description.is_empty(),
+    };
+    let cover_aligned = offered.cover_asset.is_some() && entry.cover == offered.cover_asset;
+    (
+        description_aligned,
+        cover_aligned,
+        entry.cover_local.clone(),
+    )
+}
+
+fn mark_applied(mirror_id: &str, description: Option<&str>, cover: Option<(&str, &str)>) {
     let mut applied = APPLIED.lock().unwrap_or_else(|e| e.into_inner());
     let entry = applied
         .get_or_insert_with(HashMap::new)
@@ -109,8 +127,9 @@ fn mark_applied(mirror_id: &str, description: Option<&str>, cover: Option<&str>)
     if let Some(description) = description {
         entry.description = Some(description.to_string());
     }
-    if let Some(cover) = cover {
-        entry.cover = Some(cover.to_string());
+    if let Some((origin, local)) = cover {
+        entry.cover = Some(origin.to_string());
+        entry.cover_local = Some(local.to_string());
     }
 }
 
@@ -181,13 +200,20 @@ pub async fn apply_to_mirror(
     )
     .await
     {
-        mark_applied(&mirror.id, None, Some(origin_cover));
+        mark_applied(&mirror.id, None, Some((origin_cover, &local_cover)));
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn details(description: &str, cover: Option<&str>) -> AlbumDetails {
+        AlbumDetails {
+            description: description.into(),
+            cover_asset: cover.map(str::to_string),
+        }
+    }
 
     #[test]
     fn an_immich_album_gives_its_description_and_cover() {
@@ -251,6 +277,28 @@ mod tests {
     #[test]
     fn an_empty_description_is_not_pending_on_a_mirror_never_touched() {
         assert!(!description_pending(None, &AlbumDetails::default()));
+    }
+
+    #[test]
+    fn a_mirror_never_applied_to_is_aligned_only_on_an_empty_description() {
+        let id = "alignment-test-fresh";
+        assert_eq!(alignment(id, &details("", Some("c1"))), (true, false, None));
+        assert_eq!(alignment(id, &details("Text", None)), (false, false, None));
+    }
+
+    #[test]
+    fn applied_values_that_match_the_offer_are_aligned() {
+        let id = "alignment-test-applied";
+        mark_applied(id, Some("Text"), Some(("c1", "local-1")));
+        let offered = details("Text", Some("c1"));
+        assert_eq!(
+            alignment(id, &offered),
+            (true, true, Some("local-1".into()))
+        );
+        assert_eq!(
+            alignment(id, &details("Other", Some("c2"))),
+            (false, false, Some("local-1".into()))
+        );
     }
 
     #[test]

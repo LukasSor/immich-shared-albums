@@ -207,7 +207,7 @@ connection can never address someone else's album.
 | `/directory` | the people this household offers (names only) |
 | `/albums` | the album index this household offers |
 | `/albums/:id/reunified` | "we merged this share into our own album" |
-| `/albums/:id/rename` | EXPERIMENTAL: "someone here renamed your album on our copy" |
+| `/albums/:id/edit` | EXPERIMENTAL: "someone here changed your album's name, description or cover on our copy" |
 | `/albums/:id/version`, `/manifest`, `/status`, `/leave`, `/nudge` | the sync reads, the courtesy leave, and "look again" |
 | `/index/nudge` | "what you publish has changed" |
 | `/users/:id/avatar` | one person's picture, for the stand-in that speaks for them here |

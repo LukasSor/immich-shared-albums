@@ -736,19 +736,16 @@ async fn pull_invitations_once(state: &State, client: &Client) {
                             .await;
                         }
                     }
-                    crate::sync::mirror_rename::report_local_rename(
+                    let offered = crate::sync::album_details::details_of_offer(invitation);
+                    crate::sync::album_details::apply_to_mirror(state, client, &known, &offered)
+                        .await;
+                    crate::sync::mirror_edits::report_local_edits(
                         state,
                         client,
                         &known,
                         &peer,
                         origin_renamed,
-                    )
-                    .await;
-                    crate::sync::album_details::apply_to_mirror(
-                        state,
-                        client,
-                        &known,
-                        &crate::sync::album_details::details_of_offer(invitation),
+                        &offered,
                     )
                     .await;
                     refresh_owner_picture(state, client, &known, &peer).await;

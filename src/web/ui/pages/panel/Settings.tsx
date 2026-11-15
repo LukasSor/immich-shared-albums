@@ -18,7 +18,7 @@ export const Settings = () => {
   const [pairingTtl, setPairingTtl] = useState(15);
   const [storeLocal, setStoreLocal] = useState(false);
   const [autoRemoveDuplicates, setAutoRemoveDuplicates] = useState(false);
-  const [acceptRenames, setAcceptRenames] = useState(false);
+  const [acceptEdits, setAcceptEdits] = useState(false);
 
   const load = () =>
     getSettings().then(v => {
@@ -26,7 +26,7 @@ export const Settings = () => {
       setPairingTtl(v.pairingTtlMinutes || 15);
       setStoreLocal(v.storeSharedAssetsLocally);
       setAutoRemoveDuplicates(v.removeDuplicateMirrorsAutomatically);
-      setAcceptRenames(v.acceptMirrorRenames);
+      setAcceptEdits(v.acceptMirrorEdits);
     });
   useEffect(() => {
     load().catch(() => setShareLinkJoin(true));
@@ -42,7 +42,7 @@ export const Settings = () => {
     pairingTtlMinutes: pairingTtl,
     storeSharedAssetsLocally: storeLocal,
     removeDuplicateMirrorsAutomatically: autoRemoveDuplicates,
-    acceptMirrorRenames: acceptRenames,
+    acceptMirrorEdits: acceptEdits,
   });
   const toggleJoin = (next: boolean) => {
     setShareLinkJoin(next);
@@ -63,9 +63,9 @@ export const Settings = () => {
     void persist({ ...base(), removeDuplicateMirrorsAutomatically: next });
   };
 
-  const toggleAcceptRenames = (next: boolean) => {
-    setAcceptRenames(next);
-    void persist({ ...base(), acceptMirrorRenames: next });
+  const toggleAcceptEdits = (next: boolean) => {
+    setAcceptEdits(next);
+    void persist({ ...base(), acceptMirrorEdits: next });
   };
 
   return (
@@ -89,10 +89,10 @@ export const Settings = () => {
         <Switch id="auto-remove-duplicates" checked={autoRemoveDuplicates} onChange={toggleAutoRemove} />
       </Setting>
       <Setting
-        label="Experimental: accept album renames from linked servers"
-        description="Off by default. On, someone who can edit a shared album on a linked server can rename your album from their copy. Only albums you shared by invitation with edit rights, and if you rename it too, your name wins."
+        label="Experimental: accept album edits from linked servers"
+        description="Off by default. On, someone who can edit a shared album on a linked server can change its name, description or cover from their copy. Only for albums you shared by invitation with edit rights. If you change the same thing yourself, your change wins."
       >
-        <Switch id="accept-mirror-renames" checked={acceptRenames} onChange={toggleAcceptRenames} />
+        <Switch id="accept-mirror-edits" checked={acceptEdits} onChange={toggleAcceptEdits} />
       </Setting>
       <Setting label="Pairing links stay valid for" description="Shown once. Create another if it is lost.">
         <select class="isa-field" value={pairingTtl} onChange={changeTtl}>

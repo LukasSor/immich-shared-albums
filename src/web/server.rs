@@ -312,7 +312,7 @@ struct SettingsPatch {
     #[serde(default)]
     remove_duplicate_mirrors_automatically: bool,
     #[serde(default)]
-    accept_mirror_renames: bool,
+    accept_mirror_edits: bool,
 }
 
 fn share_link_join_default() -> bool {
@@ -349,7 +349,7 @@ async fn settings_post(headers: &HeaderMap, body: HttpBody) -> Response {
         pairing_ttl_minutes: ttl,
         store_shared_assets_locally: asked.store_shared_assets_locally,
         remove_duplicate_mirrors_automatically: asked.remove_duplicate_mirrors_automatically,
-        accept_mirror_renames: asked.accept_mirror_renames,
+        accept_mirror_edits: asked.accept_mirror_edits,
     };
     if let Err(e) = wanted.write(&state().store) {
         return json_response(
@@ -431,7 +431,7 @@ fn settings_json() -> Value {
         "pairingTtlMinutes": current.pairing_ttl_minutes,
         "storeSharedAssetsLocally": current.store_shared_assets_locally,
         "removeDuplicateMirrorsAutomatically": current.remove_duplicate_mirrors_automatically,
-        "acceptMirrorRenames": current.accept_mirror_renames,
+        "acceptMirrorEdits": current.accept_mirror_edits,
     })
 }
 

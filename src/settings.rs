@@ -20,9 +20,9 @@ pub struct Settings {
     pub store_shared_assets_locally: bool,
     /// Delete duplicate mirror albums on its own. OFF unless an admin turns it on: it deletes albums.
     pub remove_duplicate_mirrors_automatically: bool,
-    /// EXPERIMENTAL. Let a linked server rename an album of ours from its mirror, when the share
-    /// lets its people edit. OFF unless an admin turns it on: it changes an album we own.
-    pub accept_mirror_renames: bool,
+    /// EXPERIMENTAL. Let a linked server change an album of ours (name, description, cover) from its
+    /// mirror, when the share lets its people edit. OFF unless an admin turns it on: it changes an album we own.
+    pub accept_mirror_edits: bool,
 }
 
 impl Default for Settings {
@@ -32,7 +32,7 @@ impl Default for Settings {
             pairing_ttl_minutes: DEFAULT_TTL_MINUTES,
             store_shared_assets_locally: false,
             remove_duplicate_mirrors_automatically: false,
-            accept_mirror_renames: false,
+            accept_mirror_edits: false,
         }
     }
 }
@@ -60,7 +60,8 @@ impl Settings {
             remove_duplicate_mirrors_automatically: get("removeDuplicateMirrorsAutomatically")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false),
-            accept_mirror_renames: get("acceptMirrorRenames")
+            accept_mirror_edits: get("acceptMirrorEdits")
+                .or_else(|| get("acceptMirrorRenames"))
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false),
         }
@@ -75,7 +76,7 @@ impl Settings {
                 "pairingTtlMinutes": self.pairing_ttl_minutes,
                 "storeSharedAssetsLocally": self.store_shared_assets_locally,
                 "removeDuplicateMirrorsAutomatically": self.remove_duplicate_mirrors_automatically,
-                "acceptMirrorRenames": self.accept_mirror_renames,
+                "acceptMirrorEdits": self.accept_mirror_edits,
             }),
         )
     }
@@ -119,13 +120,25 @@ mod tests {
     }
 
     #[test]
-    fn accepting_renames_from_mirrors_defaults_off_and_stays_off_when_unmentioned() {
-        assert!(!Settings::read(&store()).accept_mirror_renames);
+    fn accepting_edits_from_mirrors_defaults_off_and_stays_off_when_unmentioned() {
+        assert!(!Settings::read(&store()).accept_mirror_edits);
         let store = store();
         store
             .kv_set("settings", &serde_json::json!({"shareLinkJoin": true}))
             .unwrap();
-        assert!(!Settings::read(&store).accept_mirror_renames);
+        assert!(!Settings::read(&store).accept_mirror_edits);
+    }
+
+    #[test]
+    fn the_first_name_of_the_setting_is_still_read() {
+        let store = store();
+        store
+            .kv_set(
+                "settings",
+                &serde_json::json!({"acceptMirrorRenames": true}),
+            )
+            .unwrap();
+        assert!(Settings::read(&store).accept_mirror_edits);
     }
 
     #[test]
@@ -136,7 +149,7 @@ mod tests {
             pairing_ttl_minutes: 60,
             store_shared_assets_locally: true,
             remove_duplicate_mirrors_automatically: true,
-            accept_mirror_renames: true,
+            accept_mirror_edits: true,
         };
         wanted.write(&store).unwrap();
         assert_eq!(Settings::read(&store), wanted);
@@ -171,6 +184,6 @@ mod tests {
         assert!(raw.get("pairingTtlMinutes").is_some());
         assert!(raw.get("storeSharedAssetsLocally").is_some());
         assert!(raw.get("removeDuplicateMirrorsAutomatically").is_some());
-        assert!(raw.get("acceptMirrorRenames").is_some());
+        assert!(raw.get("acceptMirrorEdits").is_some());
     }
 }
