@@ -3,9 +3,9 @@ import { Document } from '../../lib/Document.tsx';
 
 export const RootDocument = () => (
   <Document page={{ name: 'root', title: '%%HOUSEHOLD%% — shared albums', hasScript: true }}>
-    <main>
-      <div id="app"></div>
-      <noscript>This page needs JavaScript. It only decides which panel to open.</noscript>
-    </main>
+    <div id="app"></div>
+    <noscript>
+      <main>This page needs JavaScript. It only decides which panel to open.</main>
+    </noscript>
   </Document>
 );

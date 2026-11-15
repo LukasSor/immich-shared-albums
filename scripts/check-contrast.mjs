@@ -12,6 +12,10 @@ const CSS = 'src/web/ui/lib/tokens.css';
 const TEXT = 4.5;
 const SHAPE = 3;
 const PAIRS = [
+  ['ink', 'bg'],
+  ['ink-muted', 'bg'],
+  ['ink-subtle', 'bg'],
+  ['accent', 'bg'],
   ['ink', 'surface'],
   ['ink', 'sunken'],
   ['ink', 'danger-surface'],
@@ -25,10 +29,13 @@ const PAIRS = [
   ['danger', 'surface'],
   ['danger', 'danger-surface'],
   ['ok', 'surface'],
+  ['ok', 'ok-surface'],
+  ['ink', 'ok-surface'],
   // The switch's moving part against the track it moves on, in BOTH states: a shape, not a word.
   ['switch-thumb-off', 'switch-track-off', SHAPE],
   ['switch-thumb-on', 'switch-track-on', SHAPE],
   ['switch-border-off', 'surface', SHAPE],
+  ['switch-border-off', 'bg', SHAPE],
   ['notice-ink', 'notice-surface'],
 ];
 

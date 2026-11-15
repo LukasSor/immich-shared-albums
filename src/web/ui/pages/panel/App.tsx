@@ -4,7 +4,7 @@ import { followServerHints } from '../../lib/live.ts';
 import { useAnnouncer } from '../../lib/announce.ts';
 import { Card } from '../../lib/Card.tsx';
 import { Notice } from '../../lib/Notice.tsx';
-import { PageHead } from '../../lib/PageHead.tsx';
+import { Shell, type Crumb } from '../../lib/Shell.tsx';
 import { Confirm, type Confirmation } from '../../lib/confirm.tsx';
 import { overview, unlinkPeer, ROUTE_PREFIX, type Overview, type Peer } from './api.ts';
 import { LinkServer } from './LinkServer.tsx';
@@ -71,35 +71,34 @@ export const App = () => {
     });
   };
 
+  const crumbs: Crumb[] = [
+    { title: 'Shared albums', href: `${ROUTE_PREFIX}/me` },
+    { title: 'Server settings and pairings' },
+  ];
+
   if (error) {
     return (
-      <>
-        <PageHead />
+      <Shell crumbs={crumbs}>
         <Card>Could not load: {error}. You may need to sign in to Immich as an admin.</Card>
-      </>
+      </Shell>
     );
   }
   if (!data) {
     return (
-      <>
-        <PageHead />
+      <Shell crumbs={crumbs}>
         <p class="isa-page-lede">Loading…</p>
-      </>
+      </Shell>
     );
   }
 
   return (
-    <>
-      <PageHead household={data.household.name} />
-      <p class="isa-page-lede">
-        Server-side settings and pairings. <a href="/immich-shared-albums/me">Your own shared albums →</a>
-      </p>
+    <Shell crumbs={crumbs} household={data.household.name}>
       {notice && <Notice key={notice.id} kind={notice.kind} text={notice.text} onDismiss={dismiss} />}
       <LinkServer onLinked={load} onOutcome={announce} />
       <SharedAlbums albums={data.albums} onDenied={refuseAlbum} />
       <ConnectedServers peers={data.peers} onUnlink={unlink} unlinking={unlinking} />
       <Settings />
       <Confirm ask={asking} onClose={() => setAsking(null)} />
-    </>
+    </Shell>
   );
 };

@@ -4,10 +4,11 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { AlbumLink } from '../../lib/AlbumLink.tsx';
 import { useAnnouncer } from '../../lib/announce.ts';
 import { Button } from '../../lib/Button.tsx';
-import { Card } from '../../lib/Card.tsx';
 import { followServerHints } from '../../lib/live.ts';
+import { Icon } from '../../lib/icons.tsx';
 import { Notice } from '../../lib/Notice.tsx';
-import { PageHead } from '../../lib/PageHead.tsx';
+import { Section } from '../../lib/Section.tsx';
+import { Shell } from '../../lib/Shell.tsx';
 import { Setting } from '../../lib/Setting.tsx';
 import { Switch } from '../../lib/Switch.tsx';
 import { Confirm, type Confirmation } from '../../lib/confirm.tsx';
@@ -155,181 +156,177 @@ export const App = () => {
   const reunifiedAlbums = albums?.filter(a => a.reunified) ?? [];
 
   return (
-    // A fragment, not a <main>: document.tsx already provides the page's one <main>, and a second
-    // inside it is invalid and announces two landmarks.
-    <>
-      <PageHead household={household || '…'} />
-      <p class="isa-page-lede">
-        Only your own Immich account.
-        {isAdmin && (
-          <>
-            {' '}
-            <a href={`${ROUTE_PREFIX}/admin`}>Server settings and pairings →</a>
-          </>
-        )}
-      </p>
+    <Shell
+      crumbs={[{ title: 'Shared albums' }]}
+      household={household || '…'}
+      actions={
+        isAdmin
+          ? [{ title: 'Server settings and pairings', href: `${ROUTE_PREFIX}/admin`, icon: 'cogOutline' }]
+          : []
+      }
+      lede="Only your own Immich account."
+    >
       {notice && <Notice key={notice.id} kind={notice.kind} text={notice.text} onDismiss={dismiss} />}
 
       {reunifiedAlbums.length > 0 && (
-        <section class="isa-section">
-          <h2 class="isa-section-title">Reunified albums</h2>
-          <Card>
-            <div class="isa-rows">
-              {reunifiedAlbums.map(a => (
-                <div class="isa-row" key={a.mappingId}>
-                  <div class="isa-row-main">
-                    <AlbumLink albumId={a.albumId} name={a.name} />
-                    <div class="isa-row-sub">
-                      {a.adoptedByUs === false ? `reunited by ${a.peer}` : 'yours, reunited'}
-                    </div>
-                  </div>
-                  {/* BOTH HALVES OF A REUNION CAN UNDO IT. `adoptedByUs` only says whose album the
-                      other half was merged INTO, and each side gives back the same thing from its own
-                      album, so the row reads the same either way. */}
-                  <div class="isa-row-action">
-                    <Button
-                      fill="danger"
-                      disabled={!!detaching}
-                      onClick={() =>
-                        setAsking({
-                          title: 'Un-reunite?',
-                          body: 'Your album keeps your photos. Only theirs are removed.',
-                          confirm: 'Un-reunite',
-                          danger: true,
-                          onConfirm: () => onUnreunite(a),
-                        })
-                      }
-                    >
-                      {detaching === a.mappingId ? 'Un-reuniting…' : 'Un-reunite'}
-                    </Button>
+        <Section title="Reunified albums" icon="callMerge">
+          <div class="isa-rows">
+            {reunifiedAlbums.map(a => (
+              <div class="isa-row" key={a.mappingId}>
+                <span class="isa-row-icon">
+                  <Icon name="imageAlbum" size="22px" />
+                </span>
+                <div class="isa-row-main">
+                  <AlbumLink albumId={a.albumId} name={a.name} />
+                  <div class="isa-row-sub">
+                    {a.adoptedByUs === false ? `reunited by ${a.peer}` : 'yours, reunited'}
                   </div>
                 </div>
-              ))}
-            </div>
-          </Card>
-        </section>
+                {/* BOTH HALVES OF A REUNION CAN UNDO IT. `adoptedByUs` only says whose album the
+                    other half was merged INTO, and each side gives back the same thing from its own
+                    album, so the row reads the same either way. */}
+                <div class="isa-row-action">
+                  <Button
+                    fill="danger"
+                    disabled={!!detaching}
+                    onClick={() =>
+                      setAsking({
+                        title: 'Un-reunite?',
+                        body: 'Your album keeps your photos. Only theirs are removed.',
+                        confirm: 'Un-reunite',
+                        danger: true,
+                        onConfirm: () => onUnreunite(a),
+                      })
+                    }
+                  >
+                    <Icon name="linkVariantOff" />
+                    {detaching === a.mappingId ? 'Un-reuniting…' : 'Un-reunite'}
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Section>
       )}
 
       {matches.length > 0 && (
-        <section class="isa-section">
-          <h2 class="isa-section-title">Possible album reunions</h2>
-          <p class="isa-section-lede">The same album, half on each server.</p>
-          <Card>
-            <div class="isa-rows">
-              {matches.map(m => (
-                <div class="isa-row" key={rowKey(m)}>
-                  <div class="isa-row-main">
-                    <AlbumLink albumId={m.albumId} name={m.mine.name} />
-                    <div class="isa-row-sub">
-                      yours: {m.mine.assetCount} {m.mine.assetCount === 1 ? 'photo' : 'photos'} ·{' '}
-                      {m.theirs.ownerName} on {m.peerName}: {m.theirs.assetCount}{' '}
-                      {m.theirs.assetCount === 1 ? 'photo' : 'photos'}
-                      {m.sameDates ? ' · dates line up' : ''}
-                    </div>
+        <Section
+          title="Possible album reunions"
+          subtitle="The same album, half on each server."
+          icon="callMerge"
+        >
+          <div class="isa-rows">
+            {matches.map(m => (
+              <div class="isa-row" key={rowKey(m)}>
+                <span class="isa-row-icon">
+                  <Icon name="imageAlbum" size="22px" />
+                </span>
+                <div class="isa-row-main">
+                  <AlbumLink albumId={m.albumId} name={m.mine.name} />
+                  <div class="isa-row-sub">
+                    yours: {m.mine.assetCount} {m.mine.assetCount === 1 ? 'photo' : 'photos'} ·{' '}
+                    {m.theirs.ownerName} on {m.peerName}: {m.theirs.assetCount}{' '}
+                    {m.theirs.assetCount === 1 ? 'photo' : 'photos'}
+                    {m.sameDates ? ' · dates line up' : ''}
                   </div>
-                  {m.step.kind === 'invite' && (
-                    // Nothing shared between the two of you yet. This shares MY album with them, the
-                    // same membership Immich's own picker makes — so the reunion can start from here.
-                    <div class="isa-row-action">
-                      <Button
-                        disabled={!!inviting}
-                        onClick={() =>
-                          setAsking({
-                            title: `Invite ${m.theirs.ownerName}?`,
-                            body: 'Shares this album with them, so they can accept the reunion.',
-                            confirm: 'Invite',
-                            onConfirm: () => onInvite(m),
-                          })
-                        }
-                      >
-                        {inviting === rowKey(m) ? 'Inviting…' : `Invite ${m.theirs.ownerName}`}
-                      </Button>
-                    </div>
-                  )}
-                  {m.step.kind === 'accept' && (
-                    <div class="isa-row-action">
-                      <Button
-                        disabled={!!reuniting}
-                        onClick={() =>
-                          setAsking({
-                            title: 'Accept the invite?',
-                            body: 'Merges their photos into your album. You can undo it.',
-                            confirm: 'Accept',
-                            onConfirm: () => onReunite(m),
-                          })
-                        }
-                      >
-                        {reuniting === rowKey(m) ? 'Reuniting…' : 'Accept invite'}
-                      </Button>
-                    </div>
-                  )}
-                  {m.step.kind === 'waiting' && (
-                    // I shared mine with them; adopting my own album is not an adoption at all, so
-                    // there is nothing to click until they accept on their side.
-                    <div class="isa-row-text">
-                      Invited {m.theirs.ownerName} — waiting for them to accept in their panel.
-                    </div>
-                  )}
                 </div>
-              ))}
-            </div>
-          </Card>
-        </section>
+                {m.step.kind === 'invite' && (
+                  // Nothing shared between the two of you yet. This shares MY album with them, the
+                  // same membership Immich's own picker makes — so the reunion can start from here.
+                  <div class="isa-row-action">
+                    <Button
+                      disabled={!!inviting}
+                      onClick={() =>
+                        setAsking({
+                          title: `Invite ${m.theirs.ownerName}?`,
+                          body: 'Shares this album with them, so they can accept the reunion.',
+                          confirm: 'Invite',
+                          onConfirm: () => onInvite(m),
+                        })
+                      }
+                    >
+                      <Icon name="accountPlusOutline" />
+                      {inviting === rowKey(m) ? 'Inviting…' : `Invite ${m.theirs.ownerName}`}
+                    </Button>
+                  </div>
+                )}
+                {m.step.kind === 'accept' && (
+                  <div class="isa-row-action">
+                    <Button
+                      disabled={!!reuniting}
+                      onClick={() =>
+                        setAsking({
+                          title: 'Accept the invite?',
+                          body: 'Merges their photos into your album. You can undo it.',
+                          confirm: 'Accept',
+                          onConfirm: () => onReunite(m),
+                        })
+                      }
+                    >
+                      <Icon name="check" />
+                      {reuniting === rowKey(m) ? 'Reuniting…' : 'Accept invite'}
+                    </Button>
+                  </div>
+                )}
+                {m.step.kind === 'waiting' && (
+                  // I shared mine with them; adopting my own album is not an adoption at all, so
+                  // there is nothing to click until they accept on their side.
+                  <div class="isa-row-text">
+                    Invited {m.theirs.ownerName} — waiting for them to accept in their panel.
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </Section>
       )}
 
-      <section class="isa-section">
-        <h2 class="isa-section-title">Your shared albums</h2>
-        {error && <Card>Couldn't load your albums: {error}</Card>}
-        {!error && albums === null && <Card>Loading…</Card>}
+      <Section title="Your shared albums" icon="imageAlbum">
+        {error && <p class="isa-empty">Couldn't load your albums: {error}</p>}
+        {!error && albums === null && <p class="isa-empty">Loading…</p>}
         {albums && albums.length === 0 && (
-          <Card>
-            <span class="isa-empty">
-              No shared albums yet. Share an album with a linked server to see it here.
-            </span>
-          </Card>
+          <p class="isa-empty">No shared albums yet. Share an album with a linked server to see it here.</p>
         )}
         {albums && albums.length > 0 && (
-          <Card>
-            <div class="isa-rows">
-              {albums.map(a => (
-                <div class="isa-row" key={`${a.peer}:${a.name}`}>
-                  <div class="isa-row-main">
-                    <AlbumLink albumId={a.albumId} name={a.name} />
-                    <div class="isa-row-sub">
-                      {/* A reunion adopts the person's OWN album, so the mapping's role says how the
-                          share arrived, not whose album this is — "shared with you" for an album you
-                          own is the one thing the row must not say. A share the PEER adopted was
-                          reunited by them, not by this household. */}
-                      {a.reunified
-                        ? a.adoptedByUs === false
-                          ? 'reunited by them'
-                          : 'yours, reunited'
-                        : a.role === 'owner'
-                          ? 'shared by you'
-                          : 'shared with you'}{' '}
-                      · with {a.peer}
-                    </div>
+          <div class="isa-rows">
+            {albums.map(a => (
+              <div class="isa-row" key={`${a.peer}:${a.name}`}>
+                <span class="isa-row-icon">
+                  <Icon name="imageAlbum" size="22px" />
+                </span>
+                <div class="isa-row-main">
+                  <AlbumLink albumId={a.albumId} name={a.name} />
+                  <div class="isa-row-sub">
+                    {/* A reunion adopts the person's OWN album, so the mapping's role says how the
+                        share arrived, not whose album this is — "shared with you" for an album you
+                        own is the one thing the row must not say. A share the PEER adopted was
+                        reunited by them, not by this household. */}
+                    {a.reunified
+                      ? a.adoptedByUs === false
+                        ? 'reunited by them'
+                        : 'yours, reunited'
+                      : a.role === 'owner'
+                        ? 'shared by you'
+                        : 'shared with you'}{' '}
+                    · with {a.peer}
                   </div>
                 </div>
-              ))}
-            </div>
-          </Card>
+              </div>
+            ))}
+          </div>
         )}
-      </section>
+      </Section>
 
-      <section class="isa-section">
-        <h2 class="isa-section-title">Album activity</h2>
-        <Card>
-          <Setting
-            label="Display bot comments"
-            description="What the addon did is written into the album as comments. Off hides them from you only — everyone else still sees them."
-          >
-            <Switch id="audit-visible" checked={auditVisible} onChange={next => void onToggleAudit(next)} />
-          </Setting>
-        </Card>
-      </section>
+      <Section title="Album activity" icon="commentTextOutline">
+        <Setting
+          label="Display bot comments"
+          description="What the addon did is written into the album as comments. Off hides them from you only — everyone else still sees them."
+        >
+          <Switch id="audit-visible" checked={auditVisible} onChange={next => void onToggleAudit(next)} />
+        </Setting>
+      </Section>
 
       <Confirm ask={asking} onClose={() => setAsking(null)} />
-    </>
+    </Shell>
   );
 };

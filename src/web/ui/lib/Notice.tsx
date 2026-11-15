@@ -1,5 +1,6 @@
-/** web/ui/lib/Notice.tsx — the snackbar: what just happened, without moving what you were reading. See design-system.md. */
+/** web/ui/lib/Notice.tsx — the toast: what just happened, without moving what you were reading. See design-system.md. */
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
+import { Icon } from './icons.tsx';
 
 /** How far the bar has to travel before letting go counts as a dismissal, whichever is smaller:
  *  a third of the way across it, or a thumb's width. */
@@ -88,11 +89,11 @@ export const Notice = ({
       onPointerCancel={onPointerUp}
     >
       <span class="isa-notice-badge" aria-hidden="true">
-        {kind === 'ok' ? '✓' : '!'}
+        <Icon name={kind === 'ok' ? 'check' : 'alertCircleOutline'} size="20px" />
       </span>
       <span class="isa-notice-text">{text}</span>
       <button type="button" class="isa-notice-dismiss" aria-label="Dismiss" onClick={onDismiss}>
-        ×
+        <Icon name="close" size="18px" />
       </button>
     </div>
   );

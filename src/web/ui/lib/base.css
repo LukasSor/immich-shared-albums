@@ -10,18 +10,18 @@ body {
   background: var(--isa-bg);
   color: var(--isa-ink);
   min-height: 100vh;
-  display: grid;
-  place-items: start center;
   font-size: 14px;
   line-height: 1.5;
+  letter-spacing: 0.1px;
   -webkit-font-smoothing: antialiased;
 }
-/* One column, one gutter, and enough room under the last card for a phone's home indicator. */
+/* Only seen with scripts off: the one line a page says when it cannot render. */
 main {
   box-sizing: border-box;
   width: 100%;
   max-width: var(--isa-page-max);
-  padding: var(--isa-space-6) var(--isa-gutter) calc(var(--isa-space-8) + env(safe-area-inset-bottom));
+  margin: 0 auto;
+  padding: var(--isa-space-6) var(--isa-gutter);
 }
 noscript {
   color: var(--isa-ink-muted);
@@ -44,44 +44,96 @@ h3 {
   padding: 0;
 }
 
-/* A title and the household it belongs to, which is the only place the page says whose it is. */
-.isa-page-head {
+/* ── the title bar ─────────────────────────────────────────────────────────────────────────────── */
+/* Immich's pages open on a 64px bar with a hairline under it: a way back, where you are, and the
+   page's own actions on the right. */
+.isa-shell {
+  min-height: 100vh;
+}
+.isa-bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
-  gap: var(--isa-space-3);
-  flex-wrap: wrap;
-  margin-bottom: var(--isa-space-3);
+  gap: var(--isa-space-2);
+  height: var(--isa-bar-height);
+  padding: 0 var(--isa-space-3);
+  background: var(--isa-bg);
+  border-bottom: 1px solid var(--isa-border);
 }
-/* The glyph sits on a tinted tile, the way Immich puts an icon in front of a heading. */
-.isa-page-icon {
+.isa-iconbtn {
   flex: none;
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--isa-radius-md);
-  background: var(--isa-accent-container);
-  color: var(--isa-accent);
+  width: var(--isa-touch);
+  height: var(--isa-touch);
+  border-radius: 50%;
+  color: var(--isa-ink);
+  text-decoration: none;
+  transition: background-color var(--isa-duration-medium) var(--isa-ease-standard);
 }
-.isa-page-icon svg {
-  width: 22px;
-  height: 22px;
+.isa-iconbtn:hover {
+  background: var(--isa-state-hover);
 }
-.isa-page-title {
-  font-size: 20px;
-  font-weight: 600;
+.isa-crumbs {
+  display: flex;
+  align-items: center;
+  gap: var(--isa-space-1);
+  min-width: 0;
+  white-space: nowrap;
+}
+.isa-crumb {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--isa-touch);
+  font-size: 16px;
+  color: var(--isa-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+a.isa-crumb {
+  text-decoration: underline;
+}
+.isa-crumb--current {
+  font-weight: 500;
+}
+.isa-crumb-sep {
+  display: inline-flex;
+  color: var(--isa-ink-subtle);
+}
+.isa-bar-desc {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--isa-ink-subtle);
+  font-size: 14px;
+}
+.isa-bar-actions {
+  display: flex;
+  gap: var(--isa-space-1);
+  margin-left: auto;
+}
+.isa-bar-action {
+  color: var(--isa-ink);
+  text-decoration: none;
+}
+
+.isa-main {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--isa-page-max);
+  margin: 0 auto;
+  padding: var(--isa-space-4) var(--isa-gutter) calc(var(--isa-space-8) + env(safe-area-inset-bottom));
 }
 /* A household name is operator-supplied and can be a hostname; it must wrap, not push the page
    sideways. The same goes for every peer and album name the panel prints. */
-.isa-page-household {
-  color: var(--isa-ink-muted);
-  font-weight: 400;
-  overflow-wrap: anywhere;
-}
 .isa-page-lede {
   color: var(--isa-ink-muted);
   font-size: 14px;
-  margin: 0 0 var(--isa-space-6);
+  margin: 0 0 var(--isa-space-2);
   overflow-wrap: anywhere;
 }
 
@@ -91,11 +143,12 @@ h3 {
   outline-offset: 2px;
 }
 
-/* A title and a household name long enough to wrap leave the title too wide for the narrowest
-   phone, so it steps down with them. ui.css cannot hold this rule: it is inlined BEFORE this file,
-   and a same-specificity rule there always loses to the one here. */
-@media (max-width: 420px) {
-  .isa-page-title {
-    font-size: 18px;
+/* Under 600px the bar keeps the way back and the actions' icons; the words and the household give
+   way. ui.css cannot hold this rule: it is inlined BEFORE this file, and a same-specificity rule
+   there always loses to the one here. */
+@media (max-width: 599px) {
+  .isa-bar-desc,
+  .isa-bar-action-label {
+    display: none;
   }
 }

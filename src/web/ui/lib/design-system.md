@@ -5,19 +5,22 @@ The layers below are the whole vocabulary; a rule that is not here is a rule a p
 
 ## The look: Immich's own
 
-These pages open beside Immich's, so they are drawn in Immich's design language, taken from its
-`@immich/ui` theme and components rather than invented:
+These pages open beside Immich's, so they are built the way Immich builds its own, from its
+`@immich/ui` theme and its web app rather than invented:
 
-| Thing           | Immich's value                                                                            | Token / class                         |
-| --------------- | ----------------------------------------------------------------------------------------- | ------------------------------------- |
-| Primary         | `#4250af` light, `#accbfa` dark; filled text white / black                                | `--isa-accent`, `--isa-accent-ink`    |
-| Page, card      | white / `#0a0a0a` page; white / `#171717` card, 1px border, `shadow-sm`, 16px corners     | `--isa-bg`, `--isa-surface`, `.isa-card` |
-| Ink             | black / `#e5e7eb`; muted gray-600 / gray-400                                               | `--isa-ink`, `--isa-ink-muted`        |
-| Section heading | 16px, medium, primary colour, sentence case                                               | `.isa-section-title`                  |
-| Button          | 12px corners, 14px medium; filled hovers to 80%, outline is a 10% tint on a primary border | `.isa-btn`                            |
-| Input           | filled well, 1px border, 8px corners, 1px primary ring on focus                           | `.isa-field`                          |
-| Toast, dialog   | a bordered card; the dialog is header / body / footer split by hairlines on a 30% scrim    | `.isa-notice`, `.isa-dialog`          |
-| Font            | `GoogleSans`, falling back to system sans — the font file is Immich's and is not shipped here | `--isa-font`                          |
+| Thing           | Immich's value                                                                                  | Here                                            |
+| --------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| Primary         | `#4250af` light, `#accbfa` dark; filled text white / black                                      | `--isa-accent`, `--isa-accent-ink`              |
+| Page            | white / pure black; text `--immich-ui-dark` (`#3d3d3d` / `#dbdbdb`), not black                  | `--isa-bg`, `--isa-ink`                         |
+| Card            | `bg-light-50` (`#fafafa`) / `#171717`, 1px border (`#d4d4d4` / `#262626`), 16px corners         | `--isa-surface`, `--isa-border`, `.isa-card`    |
+| Settings group  | `SettingAccordion`: 2px primary/20 border (primary/60 and a shadow when open), icon, medium primary title, subtitle, turning chevron | `Section`, `.isa-accordion`        |
+| Setting row     | `SettingSwitch`: label in primary, medium weight; description under it; switch at the end       | `Setting`, `.isa-setting`                       |
+| Page chrome     | a 64px bar with a bottom border: back arrow, breadcrumb, ghost icon actions on the right        | `Shell`, `.isa-bar`                             |
+| Button          | 12px corners, 14px medium; pill (`--round`) on auth screens; filled hovers to 80%, outline is a 10% tint on a primary border | `.isa-btn` |
+| Input           | `immich-form-input`: a filled well held by a 1px ring, primary on focus, 16px text, 8px corners | `.isa-field`                                    |
+| Toast, dialog   | a bordered card tinted per kind with a rounded icon tile; the dialog is header / body / footer split by hairlines on a 30% scrim | `.isa-notice`, `.isa-dialog` |
+| Icons           | Material Design Icons (Apache-2.0), the set Immich draws with                                   | `icons.tsx`                                     |
+| Font            | `GoogleSans`, falling back to system sans — the font file is Immich's and is not shipped here   | `--isa-font`                                    |
 
 Two deliberate departures, both for accessibility: Immich's danger red (`danger-500`) is 3.9:1 on
 white, so text and fills use its next step (`danger-600`, `#c81c15`); and every control keeps a 44px
@@ -46,8 +49,10 @@ page's CTA computes to `rgb(66, 80, 175)`. Changing the light accent changes tha
 | Export          | Renders                                                    | Used by                                              |
 | --------------- | ---------------------------------------------------------- | ---------------------------------------------------- |
 | `Button`        | `<button class="isa-btn isa-btn--{fill}">`, `type="button"`; a passed `class` is added to, never replaces | every panel page, the accept page, `confirm.tsx` |
-| `PageHead`      | `.isa-page-head`: the glyph on its tinted tile, "Shared albums", the household | panel, me, root                                  |
-| `LinkIcon`      | the addon's one glyph, `currentColor`                       | `PageHead`, the accept logo, the share banner         |
+| `Shell`         | `.isa-bar` (back arrow to Immich, breadcrumb, household, ghost icon actions) and `<main class="isa-main">` | panel, me, root |
+| `Section`       | `.isa-accordion`: an icon, a primary title and subtitle over a body that collapses; open by default | panel, me                              |
+| `Icon`          | an inline Material Design Icon by name (`icons.tsx`)         | every page                                            |
+| `LinkIcon`      | the addon's one glyph, `currentColor`                       | the accept and sign-in logos, the share banner        |
 | `Card`          | `<section class="isa-card isa-enter">` with an optional lede   | panel, me, root                                      |
 | `Setting`       | `<label class="isa-setting">` — text, description, control | panel `Settings.tsx`, me `App.tsx`                   |
 | `Switch`        | `<input type="checkbox" role="switch" class="isa-switch">` | panel `Settings.tsx`, me `App.tsx`                   |
@@ -82,11 +87,12 @@ confirm button out as a host `<button>` instead. Anything else that needs the no
 ## Space
 
 - `--isa-space-1..8` is a 4px step (4, 8, 12, 16, 20, 24, 32, 40). Nothing else is a margin.
-- A page is one column of `--isa-page-max` (560px) inside `--isa-gutter`, 16px and 24px from 600px.
-- Rows are `--isa-space-4` of padding with a hairline **between** them (`.isa-row + .isa-row`), never
-  under the last.
-- Cards are `--isa-pad-card`, 20px and 16px under 420px.
-- Sections are `--isa-space-6` apart; a section's title is `.isa-section-title`.
+- A page is a full-width title bar over one column of `--isa-page-max` (720px) inside `--isa-gutter`,
+  16px and 24px from 600px. The bar is `--isa-bar-height` (64px).
+- Rows are `--isa-space-3` of padding with a hairline **between** them (`.isa-row + .isa-row`), never
+  under the last; a row leads with a 40px `.isa-row-icon` tile.
+- A plain card is `--isa-pad-card`, 24px and 16px under 420px; a section's accordion is 16px by 24px.
+- Sections are `--isa-space-4` apart; a section's title is `.isa-section-title`, in primary, sentence case.
 
 ## Motion
 
@@ -135,6 +141,8 @@ confirm button out as a host `<button>` instead. Anything else that needs the no
 
 - Under 560px the accept card and the share banner become **sheets**: square bottom corners, padded
   above `env(safe-area-inset-bottom)`.
+- Under 600px the title bar keeps the back arrow, the breadcrumb and each action's icon; the household
+  and the action labels hide, and the action keeps its `aria-label`.
 - Under 420px a row's action drops to its own line, full width — a button sharing a line with a long
   album name leaves neither readable.
 - `--isa-touch` (44px) is the floor for anything tappable, whatever its type size says.
@@ -152,7 +160,7 @@ Class names and ids the browser lane drives, which must survive a redesign:
 | `#audit-visible`                                  | `pages/me/App.tsx` — the album-activity switch               |
 | `a[href="/auth/login"]`                           | `pages/sign-in/` — asserted `rgb(66, 80, 175)`               |
 
-A section title is **rendered** text, not markup: `.isa-section-title` uppercases it, and Playwright's
-`innerText` returns what was painted. Anything that reads a heading out of `innerText` must therefore
-match it case-insensitively — `sectionBetween` in `demo/e2e/browser-test.mjs` is that helper, and it
-exists because the uppercase broke the panel's "the pair appears" checks without failing loudly.
+Section order is a contract too: `sectionBetween` in `demo/e2e/browser-test.mjs` reads the page's
+`innerText` from "Possible album reunions" to "Your shared albums", so a section stays open in the DOM
+by default and keeps that order. It matches headings case-insensitively, because `innerText` returns what
+was painted rather than what is in the markup.

@@ -1,23 +1,81 @@
 /* web/ui/lib/ui.css — the shared component layer: every class below is used by two pages or more. See design-system.md. */
 @import './tokens.css';
 
-/* ── sections ──────────────────────────────────────────────────────────────────────────────── */
+/* ── a group on a page: Immich's settings accordion ────────────────────────────────────────── */
 .isa-section {
-  margin-bottom: var(--isa-space-6);
+  margin-bottom: var(--isa-space-4);
+}
+.isa-accordion {
+  box-sizing: border-box;
+  padding: var(--isa-space-4) var(--isa-space-6);
+  border: 2px solid color-mix(in srgb, var(--isa-accent) 20%, transparent);
+  border-radius: var(--isa-radius-card);
+  transition:
+    border-color var(--isa-duration-medium) var(--isa-ease-standard),
+    box-shadow var(--isa-duration-medium) var(--isa-ease-standard);
+}
+.isa-accordion--open {
+  border-color: color-mix(in srgb, var(--isa-accent) 60%, transparent);
+  box-shadow: var(--isa-shadow-2);
 }
 .isa-section-title {
   font-size: 16px;
   font-weight: 500;
   color: var(--isa-accent);
-  margin-bottom: var(--isa-space-3);
+}
+.isa-accordion-head {
+  display: flex;
+  align-items: center;
+  gap: var(--isa-space-2);
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--isa-touch);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.isa-accordion-icon {
+  flex: none;
+  display: inline-flex;
+}
+.isa-accordion-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.isa-accordion-chevron {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: var(--isa-ink);
+  transition:
+    background-color var(--isa-duration-medium) var(--isa-ease-standard),
+    transform var(--isa-duration-medium) var(--isa-ease-standard);
+}
+.isa-accordion-head:hover .isa-accordion-chevron {
+  background: color-mix(in srgb, var(--isa-accent) 10%, transparent);
+}
+.isa-accordion-head[aria-expanded='true'] .isa-accordion-chevron {
+  transform: rotate(0.5turn);
 }
 .isa-section-lede {
-  color: var(--isa-ink-muted);
-  font-size: 13px;
-  margin: calc(-1 * var(--isa-space-2)) 0 var(--isa-space-3);
+  color: var(--isa-ink);
+  font-size: 14px;
+  margin: var(--isa-space-1) 0 0;
+}
+.isa-accordion-body {
+  margin-top: var(--isa-space-2);
 }
 
-/* ── card ────────────────────────────────────────────────────────────────────────────────────── */
+/* ── card: a plain bordered box, for what is not a group ─────────────────────────────────────── */
 .isa-card {
   background: var(--isa-surface);
   border: 1px solid var(--isa-border);
@@ -27,17 +85,17 @@
 }
 .isa-card-lede {
   color: var(--isa-ink-muted);
-  font-size: 13px;
+  font-size: 14px;
   margin-bottom: var(--isa-space-4);
 }
 .isa-empty {
+  display: block;
   color: var(--isa-ink-muted);
   font-size: 14px;
   padding: var(--isa-space-2) 0;
 }
 
 /* ── control groups ─────────────────────────────────────────────────────────────────────────── */
-/* A row of controls that becomes a column rather than a two-word row when there is no room. */
 .isa-actions {
   display: flex;
   flex-wrap: wrap;
@@ -48,7 +106,6 @@
   flex: 1 1 180px;
   min-width: 0;
 }
-/* A thing that appears below another thing and belongs to it. */
 .isa-stack {
   display: flex;
   flex-direction: column;
@@ -60,9 +117,11 @@
 .isa-rows {
   display: flex;
   flex-direction: column;
+}
+.isa-card > .isa-rows {
   margin: calc(-1 * var(--isa-space-2)) 0;
 }
-/* The divider sits between rows only: a card whose last row also draws one reads as clipped. */
+/* The divider sits between rows only: a list whose last row also draws one reads as clipped. */
 .isa-row {
   display: flex;
   align-items: center;
@@ -75,6 +134,16 @@
 .isa-row + .isa-row {
   border-top: 1px solid var(--isa-hairline);
 }
+.isa-row-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--isa-radius-md);
+  background: var(--isa-accent-container);
+  color: var(--isa-accent);
+}
 .isa-row-main {
   display: block;
   flex: 1 1 200px;
@@ -85,8 +154,7 @@
   font-weight: 500;
   overflow-wrap: anywhere;
 }
-/* An album's name, opening that album in Immich. It sits where the row title was, and takes the
-   44px the rest of this file holds every target to: a 20px line of text is not a tap target. */
+/* The 44px target is the link's; its text sits mid-box, so the line under it is pulled up. */
 .isa-album-link {
   display: flex;
   align-items: center;
@@ -99,19 +167,16 @@
 .isa-album-link:hover {
   text-decoration: underline;
 }
-/* A row the server could not give an id for stays plain text rather than linking to nothing. */
 .isa-album-link--plain {
   color: inherit;
 }
 .isa-row-sub {
   display: block;
   color: var(--isa-ink-muted);
-  font-size: 13px;
+  font-size: 14px;
   margin-top: 2px;
   overflow-wrap: anywhere;
 }
-/* The link is 44px tall to be a target, and its text sits in the middle of that: pull the line under
-   it up into the empty half, or the two read as unrelated. */
 .isa-album-link + .isa-row-sub {
   margin-top: calc(-1 * var(--isa-space-2));
 }
@@ -123,16 +188,13 @@
   gap: var(--isa-space-2);
   text-align: right;
 }
-/* A row with nothing to press still reads as one line of text plus its context. */
 .isa-row-text {
   color: var(--isa-ink-muted);
-  font-size: 13px;
+  font-size: 14px;
   flex: 1 1 200px;
   min-width: 0;
   overflow-wrap: anywhere;
 }
-
-/* A row that goes somewhere: the whole row is the target and the chevron says so. */
 .isa-choice {
   display: flex;
   align-items: center;
@@ -149,20 +211,17 @@
 }
 .isa-chevron {
   flex: none;
+  display: inline-flex;
   color: var(--isa-ink-subtle);
-  font-size: 20px;
-  line-height: 1;
 }
 
 /* ── buttons ────────────────────────────────────────────────────────────────────────────────── */
-/* Immich's button: a rounded rectangle, medium weight, and a colour change on hover — no pill, no
-   lift, no press animation. The 44px floor is ours, not theirs: anything tappable is a thumb. */
 .isa-btn {
   flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--isa-space-1);
+  gap: var(--isa-space-2);
   box-sizing: border-box;
   min-height: var(--isa-touch);
   padding: 0 var(--isa-space-5);
@@ -174,9 +233,16 @@
   background: transparent;
   color: var(--isa-ink);
   cursor: pointer;
+  text-decoration: none;
   transition:
     background-color var(--isa-duration-medium) var(--isa-ease-standard),
     opacity var(--isa-duration-medium) var(--isa-ease-standard);
+}
+.isa-btn svg {
+  flex: none;
+}
+.isa-btn--round {
+  border-radius: var(--isa-radius-pill);
 }
 .isa-btn:focus-visible {
   outline: 2px solid var(--isa-accent);
@@ -208,8 +274,6 @@
 .isa-btn--text:not([disabled]):hover {
   background: var(--isa-accent-container);
 }
-/* Destructive in a LIST: tonal, so a page of rows is not a wall of red. The filled form is for a
-   confirmation, where the action is the only thing on screen. */
 .isa-btn--danger {
   background: var(--isa-danger-surface);
   color: var(--isa-danger);
@@ -226,31 +290,27 @@
 }
 
 /* ── fields ─────────────────────────────────────────────────────────────────────────────────── */
-/* Immich's input: a filled well with a 1px ring that turns primary on focus. */
 .isa-field {
   box-sizing: border-box;
   font: inherit;
-  font-size: 14px;
+  font-size: 16px;
   min-height: var(--isa-touch);
   padding: 0 var(--isa-space-4);
   width: 100%;
+  border: 0;
   border-radius: var(--isa-radius-sm);
-  border: 1px solid var(--isa-border);
   background: var(--isa-sunken);
   color: var(--isa-ink);
   outline: none;
-  transition:
-    border-color var(--isa-duration-medium) var(--isa-ease-standard),
-    box-shadow var(--isa-duration-medium) var(--isa-ease-standard);
+  box-shadow: 0 0 0 1px var(--isa-field-ring);
+  transition: box-shadow var(--isa-duration-medium) var(--isa-ease-standard);
 }
 .isa-field::placeholder {
   color: var(--isa-ink-subtle);
 }
 .isa-field:focus {
-  border-color: var(--isa-accent);
   box-shadow: 0 0 0 1px var(--isa-accent);
 }
-/* A select draws its own arrow, so the native one is dropped rather than doubled. */
 select.isa-field {
   appearance: none;
   cursor: pointer;
@@ -273,7 +333,7 @@ select.isa-field {
   align-items: center;
   justify-content: space-between;
   gap: var(--isa-space-4);
-  padding: var(--isa-space-4) 0;
+  padding: var(--isa-space-3) 0;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
@@ -288,16 +348,15 @@ select.isa-field {
   display: block;
   font-size: 14px;
   font-weight: 500;
+  color: var(--isa-accent);
 }
 .isa-setting-description {
   display: block;
-  color: var(--isa-ink-muted);
-  font-size: 13px;
+  color: var(--isa-ink);
+  font-size: 14px;
   line-height: 1.45;
   margin-top: var(--isa-space-1);
 }
-/* The control takes the room it needs, not the room there is: a select stretched to a phone's width
-   reads as a text field, and the arrow ends up a screen away from the label. */
 .isa-setting > .isa-field {
   flex: 0 1 auto;
   width: auto;
@@ -305,11 +364,8 @@ select.isa-field {
 }
 
 /* ── the switch ─────────────────────────────────────────────────────────────────────────────── */
-/* The REAL checkbox, drawn the way Immich draws its switch: no replacement element, so the keyboard,
-   the form and every assistive technology already understand it. The thumb's resting CENTRES are
-   16px from the left edge unselected and 36px selected, and every `left` below is that centre minus
-   the border minus the radius, because `::after` is placed against the PADDING box: 16 − 2 − 8 = 6,
-   and 36 − 2 − 12 = 22. The track is 52x32 in every state, and the thumb grows to 24px when on. */
+/* Every `left` is the thumb's resting centre (16px off, 36px on) minus the border minus the radius,
+   because `::after` is placed against the PADDING box: 16 − 2 − 8 = 6, and 36 − 2 − 12 = 22. */
 .isa-switch {
   appearance: none;
   -webkit-appearance: none;
@@ -363,8 +419,8 @@ select.isa-field {
 }
 
 /* ── the notice (toast) ──────────────────────────────────────────────────────────────────────── */
-/* Immich's toast is a card: the page's own surface, a hairline border, and a coloured tile that
-   says what kind of message it is. */
+/* The drag offset and the fade live in custom properties, so the entrance animation (which owns
+   `translate` while it runs) and the gesture share one property without fighting over it. */
 .isa-notice {
   position: fixed;
   left: 50%;
@@ -374,12 +430,10 @@ select.isa-field {
   display: flex;
   align-items: center;
   gap: var(--isa-space-3);
-  /* The full gutter, not a box that hugs its words: a narrow one wraps a two-word outcome into six
-     lines, and a message you have to read six lines of is a message you stop reading. */
   width: min(560px, calc(100vw - 2 * var(--isa-gutter)));
   min-height: var(--isa-touch);
   box-sizing: border-box;
-  padding: var(--isa-space-3) var(--isa-space-3) var(--isa-space-3) var(--isa-space-3);
+  padding: var(--isa-space-3);
   border: 1px solid var(--isa-border);
   border-radius: var(--isa-radius-card);
   background: var(--isa-notice-surface);
@@ -387,19 +441,23 @@ select.isa-field {
   font-size: 14px;
   line-height: 1.45;
   box-shadow: var(--isa-shadow-2);
-  /* The drag offset and the fade live in custom properties, so the entrance animation (which owns
-     `translate` while it runs) and the gesture can share one property without fighting over it. */
   translate: -50% var(--notice-drag, 0px);
   opacity: var(--notice-dim, 1);
   transition:
     translate var(--isa-duration-medium) var(--isa-ease-emphasized),
     opacity var(--isa-duration-medium) var(--isa-ease-standard);
-  /* A horizontal drag is the gesture, a vertical one is still the page's scroll. */
   touch-action: pan-y;
   user-select: none;
   animation: isa-notice-in var(--isa-duration-medium) var(--isa-ease-emphasized);
 }
-/* Under the finger, with nothing easing behind it. */
+.isa-notice--ok {
+  background: var(--isa-ok-surface);
+  border-color: var(--isa-ok-border);
+}
+.isa-notice--error {
+  background: var(--isa-danger-surface);
+  border-color: var(--isa-danger-border);
+}
 .isa-notice--grabbing {
   transition: none;
 }
@@ -413,8 +471,6 @@ select.isa-field {
   width: 32px;
   height: 32px;
   border-radius: var(--isa-radius-md);
-  font-size: 16px;
-  font-weight: 700;
 }
 .isa-notice--ok .isa-notice-badge {
   background: var(--isa-ok);
@@ -428,12 +484,11 @@ select.isa-field {
   flex: 1 1 auto;
   min-width: 0;
 }
+/* The negative margins cancel the padding around the 44px target, so the toast stays as tall as it is. */
 .isa-notice-dismiss {
   flex: none;
   display: grid;
   place-items: center;
-  /* A thumb-sized target inside a toast that stays thumb-sized: the negative margins cancel the
-     padding around it, so the × is 44px to hit without making the bar 44px taller than it is. */
   width: var(--isa-touch);
   height: var(--isa-touch);
   margin: calc(-1 * var(--isa-space-3)) calc(-1 * var(--isa-space-2)) calc(-1 * var(--isa-space-3)) 0;
@@ -442,9 +497,6 @@ select.isa-field {
   border-radius: 50%;
   background: none;
   color: var(--isa-ink-muted);
-  font: inherit;
-  font-size: 18px;
-  line-height: 1;
   cursor: pointer;
   transition: color var(--isa-duration-short) var(--isa-ease-standard);
 }
@@ -453,7 +505,6 @@ select.isa-field {
 }
 
 /* ── the dialog ──────────────────────────────────────────────────────────────────────────────── */
-/* Immich's modal: a header, a body and a footer, divided by hairlines, on a bordered card. */
 .isa-scrim {
   position: fixed;
   inset: 0;
@@ -522,7 +573,6 @@ select.isa-field {
     translate: -50% 16px;
   }
 }
-/* Swiped away in the direction it went, so the message leaves the way the thumb sent it. */
 @keyframes isa-notice-out {
   to {
     opacity: 0;
@@ -534,15 +584,13 @@ select.isa-field {
     rotate: 360deg;
   }
 }
-/* One entrance for everything a page lists: cards arrive, a beat apart, from 8px down. The delay
-   counts SECTIONS, not cards — a page with nine cards must not finish arriving after the read. */
 .isa-enter {
   animation: isa-rise-in var(--isa-duration-long) var(--isa-ease-emphasized) both;
 }
-.isa-section + .isa-section > .isa-card {
+.isa-section + .isa-section {
   animation-delay: 60ms;
 }
-.isa-section + .isa-section + .isa-section > .isa-card {
+.isa-section + .isa-section + .isa-section {
   animation-delay: 120ms;
 }
 .isa-spinner {
@@ -556,9 +604,7 @@ select.isa-field {
   animation: isa-spin 0.8s linear infinite;
 }
 
-/* A person who asked their device for less motion gets none: the state is already the answer, and
-   an animation is only ever a way of arriving at one. Scoped to our own document, which is why
-   `.isa-page` is on the body Document.tsx renders. */
+/* Scoped to our own document (`.isa-page` is on the body Document.tsx renders). */
 @media (prefers-reduced-motion: reduce) {
   .isa-page *,
   .isa-page *::before,
@@ -578,8 +624,9 @@ select.isa-field {
   :root {
     --isa-pad-card: 16px;
   }
-  /* One action per line, at thumb height: a row whose button shares the line with a long album
-     name leaves neither of them readable. */
+  .isa-accordion {
+    padding: var(--isa-space-3) var(--isa-space-4);
+  }
   .isa-row {
     flex-wrap: wrap;
   }

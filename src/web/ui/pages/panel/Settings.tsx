@@ -1,7 +1,7 @@
 /** web/ui/pages/panel/Settings.tsx — the panel-managed settings: shared-link joining, pairing-link
  *  TTL, and storing shared assets locally. See ../../../http-router.md. */
 import { useEffect, useState } from 'preact/hooks';
-import { Card } from '../../lib/Card.tsx';
+import { Section } from '../../lib/Section.tsx';
 import { Setting } from '../../lib/Setting.tsx';
 import { Switch } from '../../lib/Switch.tsx';
 import { getSettings, saveSettings, type Settings as S } from './api.ts';
@@ -53,31 +53,28 @@ export const Settings = () => {
   };
 
   return (
-    <section class="isa-section">
-      <h2 class="isa-section-title">Settings</h2>
-      <Card>
-        <Setting
-          label="Allow other Immich users to join albums via shared links"
-          description="Off, share pages are Immich's own and joins are refused. Linked servers and pairing are unaffected."
-        >
-          <Switch id="share-link-join" checked={shareLinkJoin} onChange={toggleJoin} />
-        </Setting>
-        <Setting
-          label="Store shared photos on this server"
-          description="Off, they stream from their owner and use no space here. On, they are copied over in the background and use real disk space. Turning this off does not remove copies already made."
-        >
-          <Switch id="store-locally" checked={storeLocal} onChange={toggleStore} />
-        </Setting>
-        <Setting label="Pairing links stay valid for" description="Shown once. Create another if it is lost.">
-          <select class="isa-field" value={pairingTtl} onChange={changeTtl}>
-            {TTL_CHOICES.map(c => (
-              <option key={c.minutes} value={c.minutes}>
-                {c.label}
-              </option>
-            ))}
-          </select>
-        </Setting>
-      </Card>
-    </section>
+    <Section title="Settings" icon="cogOutline">
+      <Setting
+        label="Allow other Immich users to join albums via shared links"
+        description="Off, share pages are Immich's own and joins are refused. Linked servers and pairing are unaffected."
+      >
+        <Switch id="share-link-join" checked={shareLinkJoin} onChange={toggleJoin} />
+      </Setting>
+      <Setting
+        label="Store shared photos on this server"
+        description="Off, they stream from their owner and use no space here. On, they are copied over in the background and use real disk space. Turning this off does not remove copies already made."
+      >
+        <Switch id="store-locally" checked={storeLocal} onChange={toggleStore} />
+      </Setting>
+      <Setting label="Pairing links stay valid for" description="Shown once. Create another if it is lost.">
+        <select class="isa-field" value={pairingTtl} onChange={changeTtl}>
+          {TTL_CHOICES.map(c => (
+            <option key={c.minutes} value={c.minutes}>
+              {c.label}
+            </option>
+          ))}
+        </select>
+      </Setting>
+    </Section>
   );
 };

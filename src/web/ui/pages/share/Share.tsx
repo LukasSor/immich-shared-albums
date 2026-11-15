@@ -1,5 +1,6 @@
 /** web/ui/pages/share/Share.tsx — the join card floating over the framed native share page. See ../../../http-router.md. */
 import { useState } from 'preact/hooks';
+import { Icon } from '../../lib/icons.tsx';
 import { LinkIcon } from '../../lib/LinkIcon.tsx';
 
 // #immich-shared-albums-banner .card/input/button.join/.err are a TEST CONTRACT — the browser
@@ -92,7 +93,7 @@ export const Share = () => {
               continueToNativePage();
             }}
           >
-            &times;
+            <Icon name="close" size="20px" />
           </button>
           <div class="row">
             <div class="logo">

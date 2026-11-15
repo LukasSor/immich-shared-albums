@@ -4,19 +4,19 @@
     'GoogleSans', 'Google Sans', 'Overpass', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
     sans-serif;
 
-  /* Surfaces. Immich draws a card as a bordered white panel on a white page, so depth is a hairline
-     first and a fill change second. */
+  /* Immich's page is white / black and its cards are one step off it, bordered. */
   --isa-bg: #ffffff;
-  --isa-surface: #ffffff;
-  --isa-sunken: #f5f5f5;
+  --isa-surface: #fafafa;
+  --isa-sunken: #f3f4f6;
 
   /* Ink, three steps: what you read, what you read as context, what is a boundary. */
-  --isa-ink: #000000;
+  --isa-ink: #3d3d3d;
   --isa-ink-muted: #4b5563;
-  --isa-ink-subtle: #646b77;
+  --isa-ink-subtle: #5f6672;
 
-  --isa-border: #e5e5e5;
+  --isa-border: #d4d4d4;
   --isa-hairline: #e5e5e5;
+  --isa-field-ring: #e5e7eb;
 
   --isa-accent: #4250af;
   --isa-accent-ink: #ffffff;
@@ -25,7 +25,10 @@
 
   --isa-danger: #c81c15;
   --isa-danger-surface: #fef4f3;
+  --isa-danger-border: #fddede;
   --isa-ok: #07702a;
+  --isa-ok-surface: #f3fcf7;
+  --isa-ok-border: #b7ffc2;
 
   /* The switch's own values: Immich draws the off state as an outlined track with a dark thumb and
      the on state as a tinted track with a primary thumb, so the two states are separate colours
@@ -39,7 +42,7 @@
   /* The tint a hover lays over a row or a quiet control. */
   --isa-state-hover: rgba(0, 0, 0, 0.05);
 
-  /* The toast is a card in Immich, so it takes the page's own surface and ink. */
+  /* A toast takes the page's ink; its surface is tinted per kind (--isa-ok-surface, --isa-danger-surface). */
   --isa-notice-surface: var(--isa-surface);
   --isa-notice-ink: var(--isa-ink);
 
@@ -55,11 +58,12 @@
   --isa-radius-card: 16px;
   --isa-radius-pill: 999px;
 
-  --isa-pad-card: 20px;
+  --isa-pad-card: 24px;
   --isa-pad-hero: 32px;
   /* The page's own gutter, widened once there is room for it. */
   --isa-gutter: 16px;
-  --isa-page-max: 560px;
+  --isa-page-max: 720px;
+  --isa-bar-height: 64px;
   --isa-space-1: 4px;
   --isa-space-2: 8px;
   --isa-space-3: 12px;
@@ -83,25 +87,29 @@
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --isa-bg: #0a0a0a;
+    --isa-bg: #000000;
     --isa-surface: #171717;
-    --isa-sunken: #262626;
+    --isa-sunken: #1f2937;
 
-    --isa-ink: #e5e7eb;
+    --isa-ink: #dbdbdb;
     --isa-ink-muted: #9ca3af;
     --isa-ink-subtle: #9ca3af;
 
-    --isa-border: rgba(255, 255, 255, 0.1);
-    --isa-hairline: rgba(255, 255, 255, 0.1);
+    --isa-border: #262626;
+    --isa-hairline: #262626;
+    --isa-field-ring: #171717;
 
     --isa-accent: #accbfa;
     --isa-accent-ink: #000000;
     --isa-accent-container: #1a2433;
     --isa-scrim: rgba(0, 0, 0, 0.3);
 
-    --isa-danger: #fa6967;
-    --isa-danger-surface: #3b1517;
-    --isa-ok: #15d556;
+    --isa-danger: #f67d7d;
+    --isa-danger-surface: #490606;
+    --isa-danger-border: #801212;
+    --isa-ok: #48ed98;
+    --isa-ok-surface: #09311b;
+    --isa-ok-border: #165b38;
 
     --isa-switch-track-off: #262626;
     --isa-switch-border-off: #6b7280;

@@ -1,7 +1,8 @@
 /** web/ui/pages/root/App.tsx — the one URL to remember: it decides which panel to open. See ../../../http-router.md. */
 import { useEffect, useState } from 'preact/hooks';
 import { Card } from '../../lib/Card.tsx';
-import { PageHead } from '../../lib/PageHead.tsx';
+import { Icon } from '../../lib/icons.tsx';
+import { Shell } from '../../lib/Shell.tsx';
 import { myAlbums } from '../me/api.ts';
 
 const ROUTE_PREFIX = '/immich-shared-albums';
@@ -26,38 +27,56 @@ export const App = () => {
       .catch(() => setFailed(true));
   }, []);
 
+  const crumbs = [{ title: 'Shared albums' }];
+
   if (failed)
     return (
-      <Card>
-        Could not reach this server. <a href={`${ROUTE_PREFIX}/me`}>Open your shared albums</a>.
-      </Card>
+      <Shell crumbs={crumbs}>
+        <Card>
+          Could not reach this server. <a href={`${ROUTE_PREFIX}/me`}>Open your shared albums</a>.
+        </Card>
+      </Shell>
     );
-  if (isAdmin === null) return <Card>Loading…</Card>;
+  if (isAdmin === null)
+    return (
+      <Shell crumbs={crumbs}>
+        <Card>Loading…</Card>
+      </Shell>
+    );
 
   return (
-    <>
-      <PageHead />
+    <Shell crumbs={crumbs}>
       <Card>
         <div class="isa-rows">
           {/* `choice` alongside `isa-choice` is a TEST CONTRACT — the browser lane asserts on a.choice. */}
           <a href={`${ROUTE_PREFIX}/me`} class="isa-choice choice">
+            <span class="isa-row-icon">
+              <Icon name="imageAlbum" size="22px" />
+            </span>
             <span class="isa-row-main">
               <span class="isa-row-title">Your shared albums</span>
               <span class="isa-row-sub">Albums you share across servers</span>
             </span>
-            <span class="isa-chevron">›</span>
+            <span class="isa-chevron">
+              <Icon name="chevronRight" size="22px" />
+            </span>
           </a>
           <a href={`${ROUTE_PREFIX}/admin`} class="isa-choice choice">
+            <span class="isa-row-icon">
+              <Icon name="cogOutline" size="22px" />
+            </span>
             <span class="isa-row-main">
               <span class="isa-row-title">Server settings and pairings</span>
               <span class="isa-row-sub">
                 Linked servers, pairing, and this server's settings · admins only
               </span>
             </span>
-            <span class="isa-chevron">›</span>
+            <span class="isa-chevron">
+              <Icon name="chevronRight" size="22px" />
+            </span>
           </a>
         </div>
       </Card>
-    </>
+    </Shell>
   );
 };
