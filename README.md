@@ -1,6 +1,6 @@
 <p align="center">
   <br/>
-  <a href="https://github.com/lukeet332/immich-shared-albums/actions/workflows/e2e.yml"><img src="https://github.com/lukeet332/immich-shared-albums/actions/workflows/e2e.yml/badge.svg" alt="e2e"/></a>
+  <a href="https://github.com/LukasSor/immich-shared-albums/actions/workflows/e2e.yml"><img src="https://github.com/LukasSor/immich-shared-albums/actions/workflows/e2e.yml/badge.svg" alt="e2e"/></a>
   <a href="https://coderabbit.ai"><img src="https://img.shields.io/coderabbit/prs/github/lukeet332/immich-shared-albums?utm_source=oss&utm_medium=github&utm_campaign=lukeet332%2Fimmich-shared-albums&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews" alt="CodeRabbit Pull Request Reviews"/></a>
   <a href="https://github.com/sponsors/lukeet332"><img src="https://img.shields.io/badge/❤-Sponsor-ea4aaa?style=for-the-badge&logoColor=000000&labelColor=ececec" alt="Sponsor"/></a>
   <br/>
@@ -27,6 +27,13 @@
 </a>
 </p>
 
+> [!IMPORTANT]
+> **This is a fork of [lukeet332/immich-shared-albums](https://github.com/lukeet332/immich-shared-albums).**
+> It fixes upload timeouts and the duplicate albums that pile up over time, follows renames, descriptions, covers and photo edits from the origin, and has a panel that looks like Immich. See [FORK.md](./FORK.md) for the full list of changes.
+
+> [!TIP]
+> Run this fork's image, **`ghcr.io/lukassor/immich-shared-albums:latest`**, instead of building upstream from source. A [Docker Compose example](#docker-compose) is further down.
+
 > [!WARNING]
 > ⚠️ Under very active development. Breaking changes arrive only in major versions — see [Versioning](#versioning) — and always follow a [3-2-1](https://www.backblaze.com/blog/the-3-2-1-backup-strategy/) backup plan for your precious photos and videos!
 
@@ -46,6 +53,7 @@
 - [Documentation](#documentation)
 - [Contributing](./AGENTS.md)
 - [Changelog](./CHANGELOG.md)
+- [What this fork changes](./FORK.md)
 
 ## Documentation
 
