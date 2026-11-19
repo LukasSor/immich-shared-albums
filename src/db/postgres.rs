@@ -1,6 +1,7 @@
 /** db/postgres.rs — the Postgres backend: one client on its own worker thread, so the async runtime never blocks inside it. See ARCHITECTURE.md. */
 use super::{Backend, Row, Step, Val};
 use crate::store::StoreError;
+use postgres::error::SqlState;
 use postgres::types::{to_sql_checked, IsNull, ToSql, Type};
 use postgres::{Client, NoTls};
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -112,26 +113,42 @@ fn refs(params: &[Val]) -> Vec<&(dyn ToSql + Sync)> {
     params.iter().map(|p| p as &(dyn ToSql + Sync)).collect()
 }
 
+fn still_starting(error: &postgres::Error) -> bool {
+    error
+        .as_db_error()
+        .is_some_and(|db| *db.code() == SqlState::CANNOT_CONNECT_NOW)
+        || error.to_string().starts_with("error connecting to server")
+}
+
+fn explained(error: &postgres::Error) -> String {
+    if let Some(db) = error.as_db_error() {
+        return format!("{}: {}", db.severity(), db.message());
+    }
+    let text = error.to_string();
+    if text.contains("TLS") {
+        return "the connection asks for TLS, which this build does not support; remove sslmode from ISA_DATABASE_URL and keep the database on a private network".into();
+    }
+    text
+}
+
 fn connect(url: &str) -> Result<Client, String> {
     let config: postgres::Config = url
         .parse()
         .map_err(|e: postgres::Error| format!("ISA_DATABASE_URL is not a Postgres URL: {e}"))?;
-    let mut last = String::new();
-    for attempt in 1..=CONNECT_ATTEMPTS {
+    let mut attempt = 1;
+    loop {
         match config.connect(NoTls) {
             Ok(client) => return Ok(client),
-            Err(e) => {
-                last = e.to_string();
-                if attempt < CONNECT_ATTEMPTS {
-                    crate::log!(
-                        "the database is not reachable yet (attempt {attempt}): {last} — retrying"
-                    );
-                    std::thread::sleep(CONNECT_WAIT);
-                }
+            Err(e) if attempt < CONNECT_ATTEMPTS && still_starting(&e) => {
+                crate::log!(
+                    "the database is not reachable yet (attempt {attempt}): {e} — retrying"
+                );
+                std::thread::sleep(CONNECT_WAIT);
+                attempt += 1;
             }
+            Err(e) => return Err(explained(&e)),
         }
     }
-    Err(last)
 }
 
 fn run(client: &mut Client, work: &Work) -> Result<Reply, String> {
