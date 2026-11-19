@@ -194,7 +194,17 @@ fn run(client: &mut Client, work: &Work) -> Result<Reply, String> {
     }
 }
 
-fn serve(url: String, mut client: Client, jobs: Receiver<Job>) {
+fn serve(url: String, started: Sender<Result<(), String>>, jobs: Receiver<Job>) {
+    let mut client = match connect(&url) {
+        Ok(client) => {
+            let _ = started.send(Ok(()));
+            client
+        }
+        Err(e) => {
+            let _ = started.send(Err(e));
+            return;
+        }
+    };
     while let Ok(job) = jobs.recv() {
         if client.is_closed() {
             match connect(&url) {
@@ -213,13 +223,17 @@ fn serve(url: String, mut client: Client, jobs: Receiver<Job>) {
 
 impl Postgres {
     pub fn connect(url: &str) -> Result<Postgres, StoreError> {
-        let client = connect(url).map_err(StoreError::Database)?;
         let (sender, receiver) = channel();
+        let (started, ready) = channel();
         let owned = url.to_string();
         std::thread::Builder::new()
             .name("isa-postgres".into())
-            .spawn(move || serve(owned, client, receiver))
+            .spawn(move || serve(owned, started, receiver))
             .map_err(|e| StoreError::Io(e.to_string()))?;
+        ready
+            .recv()
+            .map_err(|_| StoreError::Database("the database worker stopped at start".into()))?
+            .map_err(StoreError::Database)?;
         Ok(Postgres {
             jobs: Mutex::new(sender),
         })
@@ -320,6 +334,33 @@ impl Backend for Postgres {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn the_store_opens_and_answers_from_inside_the_async_runtime() {
+        let Ok(url) = std::env::var("ISA_TEST_POSTGRES_URL") else {
+            eprintln!("skipped: ISA_TEST_POSTGRES_URL is not set");
+            return;
+        };
+        let schema = format!("isa_async_{}", std::process::id());
+        let admin = Postgres::connect_isolated(&url);
+        admin
+            .script(&format!(
+                "DROP SCHEMA IF EXISTS {schema} CASCADE; CREATE SCHEMA {schema};"
+            ))
+            .unwrap();
+        let scoped = format!(
+            "{url}{}options=-c%20search_path%3D{schema}",
+            if url.contains('?') { "&" } else { "?" }
+        );
+        let dir = std::env::temp_dir().join(format!("isa-async-{}", std::process::id()));
+        let store = crate::store::Store::open_postgres(dir.to_str().unwrap(), &scoped)
+            .expect("a store opens on Postgres from inside the runtime");
+        store.seen_add("m1", "c1", "a1", None, false).unwrap();
+        assert!(store.seen_has("m1", "c1").unwrap());
+        admin
+            .script(&format!("DROP SCHEMA {schema} CASCADE;"))
+            .unwrap();
+    }
 
     #[test]
     fn numbered_placeholders_become_dollar_placeholders() {
