@@ -18,6 +18,11 @@ async fn main() {
     let port = loaded.port;
     config::install(loaded);
 
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(code) = immich_shared_albums::migrate::run(&args) {
+        std::process::exit(code);
+    }
+
     let booted = match state::State::boot() {
         Ok(booted) => booted,
         Err(e) => {

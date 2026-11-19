@@ -3,6 +3,7 @@ pub mod config;
 pub mod db;
 pub mod immich;
 pub mod media;
+pub mod migrate;
 pub mod p2p;
 pub mod protocol;
 pub mod settings;

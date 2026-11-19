@@ -63,7 +63,10 @@ impl State {
                 crate::log!("using the Postgres database from ISA_DATABASE_URL");
                 Store::open_postgres(&data_dir, url)?
             }
-            None => Store::open(&data_dir)?,
+            None => {
+                crate::migrate::refuse_stale_sqlite(&data_dir, cfg().allow_stale_state_db)?;
+                Store::open(&data_dir)?
+            }
         };
         let state = Arc::new(State {
             store,

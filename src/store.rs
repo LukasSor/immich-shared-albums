@@ -309,7 +309,9 @@ impl Store {
                 source.display()
             );
             let old = Self::open(data_dir)?;
-            return Self::with_db(db, Some(&old.db));
+            let moved = Self::with_db(db, Some(&old.db))?;
+            crate::migrate::mark_moved(data_dir)?;
+            return Ok(moved);
         }
         Self::with_db(db, None)
     }
@@ -338,7 +340,7 @@ impl Store {
         Self::with_db(Db::new(crate::db::sqlite::Sqlite::in_memory()?), None)
     }
 
-    fn with_db(db: Db, import_from: Option<&Db>) -> Result<Self, StoreError> {
+    pub(crate) fn with_db(db: Db, import_from: Option<&Db>) -> Result<Self, StoreError> {
         let mut store = Store {
             db,
             state: Mutex::new(Collections::default()),
@@ -1337,6 +1339,7 @@ pub enum StoreError {
     Database(String),
     Io(String),
     PreV1,
+    MovedToPostgres,
     Corrupt(String),
     SchemaVersion { found: i64, expected: i64 },
 }
@@ -1351,6 +1354,13 @@ impl std::fmt::Display for StoreError {
                 f,
                 "state.db is from a pre-v1 build. Stop the container, delete the data volume, \
                  and pair the servers again — pre-v1 state is not migrated."
+            ),
+            StoreError::MovedToPostgres => write!(
+                f,
+                "this install moved to Postgres, so state.db is out of date. Set ISA_DATABASE_URL again to keep \
+                 using Postgres, or run `isa migrate-to-sqlite` with ISA_DATABASE_URL still set to bring the data \
+                 back into state.db. To start on the old state.db anyway and lose what changed on Postgres, set \
+                 ISA_ALLOW_STALE_STATE_DB=true."
             ),
             StoreError::Corrupt(e) => write!(
                 f,
@@ -1728,6 +1738,10 @@ mod tests {
         drop(old);
 
         let moved = Store::open_postgres(path, &url).unwrap();
+        assert!(
+            crate::migrate::has_moved(path),
+            "the automatic copy leaves the marker that stops a later SQLite start on stale data"
+        );
         assert_eq!(moved.seen_for_mapping("m1").unwrap().len(), 2);
         assert!(moved.seen_for_mapping("m1").unwrap()[1].stored_full);
         assert!(moved.seen_has("m1", "c1").unwrap());

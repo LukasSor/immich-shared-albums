@@ -137,7 +137,7 @@ chmod 600 .env
 
 Set `ISA_IMMICH_API_KEY` in `.env`, then `docker compose up -d`. `docker-compose.yml` and `example.env` need nothing else from the clone; copy just those two files to any folder to run from there.
 
-To keep the state in Postgres instead of SQLite, add `ISA_DATABASE_PASSWORD` to `.env` and run `docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d`; an existing `state.db` is copied over on the first start. Details in [deploy/configuration.md](./deploy/configuration.md#using-postgres).
+To keep the state in Postgres instead of SQLite, add `ISA_DATABASE_PASSWORD` to `.env` and run `docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d`; an existing `state.db` is copied over on the first start, and `isa migrate-to-sqlite` copies it back. Details in [deploy/configuration.md](./deploy/configuration.md#using-postgres).
 
 `docker-compose.yml`:
 

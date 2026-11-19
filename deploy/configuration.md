@@ -17,6 +17,7 @@ Every setting is `ISA_`-prefixed so the addon can never collide with Immich's ow
 | `ISA_ADVERTISE_ADDR`              | —                           | `<ipv4-or-host>:<port>` that peers are told to dial, carried in the pairing link and in share-page invite tokens. Set it whenever the addresses this container sees are not the ones a peer can reach: a forwarded UDP port (`203.0.113.7:8300`, or `home.example.com:9000` when the outside port differs), or a LAN/VPN address. A hostname travels as written and the peer resolves it again on every dial, so a dynamic (DDNS) address stays current; the resolved IP is only where the first dial starts. IPv4 only: the transport binds `0.0.0.0`. |
 | `ISA_DATA_DIR`                    | `/data`                     | Where `state.db` lives. Back this up; it holds this server's identity key — and copy the whole directory, not just `state.db` (its WAL sidecar files carry recent writes).                                                                                                                                                                                                                                                           |
 | `ISA_DATABASE_URL`                | —                           | Keep the addon's state in Postgres instead of `state.db`: `postgres://user:password@host:5432/dbname`. Unset, SQLite is used. See [Using Postgres](#using-postgres). The connection is not encrypted, so keep it on a private network. |
+| `ISA_ALLOW_STALE_STATE_DB`        | `false`                     | Start on `state.db` although this install moved to Postgres, losing what changed there. See [Using Postgres](#using-postgres). |
 | `ISA_LINK_JOIN_REQUIRES_PASSWORD` | `false`                     | Refuse to let another _server_ join from a share link that has no password. A gate on joining, not viewing — a link's own password and expiry are always enforced. Worth setting if your Immich is public.                                                                                                                                                                                                                           |
 | `ISA_PUBLISH_USER_DIRECTORY`      | `true`                      | Publish your users' names (never emails) to linked servers so they can be picked in the share menu. `false` keeps your user list private and disables native invitations from those servers, leaving share links.                                                                                                                                                                                                                    |
 | `ISA_RELAY`                       | `true`                      | If two servers can't connect directly (roughly 1 network in 10), traffic falls back through a public relay run by [n0](https://n0.computer). The relay only ever sees encrypted bytes. `false` removes the relay entirely — including the address discovery and hole punching it provides — so peers must be able to reach an address this server advertises (`ISA_ADVERTISE_ADDR`), or share a network with it. See [SETUP.md](./SETUP.md). |
@@ -46,8 +47,25 @@ docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d
   store copies `state.db` into it, so the server keeps its identity, its links and its keys. `state.db`
   is only read and stays where it is as a backup; it is not used again, and nothing is copied a second
   time. Back it up before the first start anyway.
-- **Going back.** Unset `ISA_DATABASE_URL`. The addon reads `state.db` again, which holds what it held
-  when you left: anything that changed while on Postgres is not in it.
+- **Going back, and why removing the lines is refused.** `state.db` is out of date from the moment the
+  copy is made, so the addon will not start on it by accident: after a move it leaves a marker
+  (`.moved-to-postgres`) in `ISA_DATA_DIR`, and a start with `ISA_DATABASE_URL` unset stops with a
+  message saying so. To go back with the data, stop the addon and run the copy-back with the URL still
+  set, then remove the Postgres lines:
+
+  ```sh
+  docker compose -f docker-compose.yml -f docker-compose.postgres.yml stop immich-shared-albums
+  docker compose -f docker-compose.yml -f docker-compose.postgres.yml run --rm immich-shared-albums isa migrate-to-sqlite
+  ```
+
+  The old `state.db` is moved into `state.db.before-<time>/` first, and the marker is cleared. To start
+  on the stale `state.db` instead and lose what changed on Postgres, set `ISA_ALLOW_STALE_STATE_DB=true`.
+- **Moving by hand.** `isa migrate-to-postgres` and `isa migrate-to-sqlite` copy in either direction on
+  request, with the addon stopped. Each refuses to overwrite a store that is already there (a Postgres
+  that holds one, or a `state.db` that no move left behind) unless you add `--force`; a `state.db` is
+  always set aside before it is replaced, a Postgres is not.
+- **One database at a time.** The addon uses exactly one: Postgres when `ISA_DATABASE_URL` is set, otherwise
+  `state.db`. The Postgres container is a separate service; stop it yourself once you are back on SQLite.
 - **What stays on disk.** `ISA_DATA_DIR` still holds the photo cache, so keep the volume.
 - **A password with special characters** must be percent-encoded in the URL (`@` is `%40`, `/` is `%2F`).
 - **No TLS.** The client connects without encryption and refuses a URL that demands it

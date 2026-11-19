@@ -24,6 +24,7 @@ pub struct Config {
     pub p2p_port: u16,
     pub data_dir: String,
     pub database_url: Option<String>,
+    pub allow_stale_state_db: bool,
     pub sync_poll_ms: u64,
     pub comment_poll_ms: u64,
     pub mirror_album_template: String,
@@ -75,6 +76,7 @@ impl std::fmt::Debug for Config {
                     .map(|a| format!("{}:{}", a.host, a.port)),
             )
             .field("reconcile_debug", &self.reconcile_debug)
+            .field("allow_stale_state_db", &self.allow_stale_state_db)
             .field("test_hooks", &self.test_hooks)
             .finish()
     }
@@ -178,6 +180,7 @@ impl Config {
             p2p_port: env_port("ISA_P2P_PORT", 8300, 0)?,
             data_dir: env_str("ISA_DATA_DIR", "/data"),
             database_url: Some(env_str("ISA_DATABASE_URL", "")).filter(|url| !url.is_empty()),
+            allow_stale_state_db: env_bool("ISA_ALLOW_STALE_STATE_DB", false)?,
             // Nudges are the real path (a peer's channel nudge wakes its lane); these timers are
             // the slow backstop for a LOST nudge, so minutes. An operator can shorten them, but a
             // lost nudge should be the only thing the shortening buys.
@@ -466,6 +469,7 @@ pub fn install_test_config() {
             p2p_port: 8300,
             data_dir: "/tmp/isa-test-data".into(),
             database_url: None,
+            allow_stale_state_db: false,
             sync_poll_ms: 120_000,
             comment_poll_ms: 60_000,
             mirror_album_template: "{name}".into(),
