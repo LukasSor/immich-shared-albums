@@ -41,6 +41,7 @@ Bugs present in upstream that are fixed here:
   - A person's **profile picture**, re-checked at most hourly and uploaded only when it changed (`367813b`).
 - **Duplicate albums, found and removed.** The panel's *Duplicate albums* section lists mirror albums that nothing tracks and that sit beside the live copy of the same share, then removes exactly that list after a confirmation. It only ever touches albums owned by the addon's own stand-in accounts (`1d8a97d`, `c11bfcb`).
 - **A panel that looks like Immich.** The pages use Immich's palette, type, title bar, accordions, switches and icons, in light and dark (`96ec016`, `b5de72c`).
+- **Postgres instead of SQLite, optional.** Set `ISA_DATABASE_URL` and the state lives in Postgres; a database that has never held a store takes a one-time copy of `state.db`, so the server keeps its identity and links. SQLite stays the default. See [Using Postgres](deploy/configuration.md#using-postgres).
 - **Edits from the other side, experimental.** With the switch below on, someone who can edit a shared album on a linked server can change its name, description or cover from their copy, and it reaches your album (`3551059`, `d53ad10`).
 
 ## New settings

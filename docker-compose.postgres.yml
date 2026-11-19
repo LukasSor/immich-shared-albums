@@ -1,0 +1,27 @@
+services:
+  immich-shared-albums:
+    environment:
+      ISA_DATABASE_URL: postgres://isa:${ISA_DATABASE_PASSWORD}@isa-postgres:5432/isa
+    depends_on:
+      isa-postgres:
+        condition: service_healthy
+
+  isa-postgres:
+    image: postgres:16-alpine
+    container_name: isa_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: isa
+      POSTGRES_PASSWORD: ${ISA_DATABASE_PASSWORD}
+      POSTGRES_DB: isa
+    volumes:
+      - isa-postgres:/var/lib/postgresql/data
+    networks: [immich]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U isa -d isa"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  isa-postgres:

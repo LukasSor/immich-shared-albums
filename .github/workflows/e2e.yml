@@ -36,6 +36,23 @@ jobs:
     runs-on: ubuntu-latest
     # The Rust suite compiles iroh and reqwest on a cold cache; npm steps take the rest.
     timeout-minutes: 25
+    # The store's tests run on SQLite and, with this service, on Postgres too: the same tests prove
+    # both backends. The AWS mirror of the official image, because Docker Hub throttles anonymous pulls.
+    services:
+      postgres:
+        image: public.ecr.aws/docker/library/postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: isa
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      ISA_TEST_POSTGRES_URL: postgres://postgres:ci@localhost:5432/isa
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: npm install --silent

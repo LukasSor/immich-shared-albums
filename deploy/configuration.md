@@ -16,6 +16,7 @@ Every setting is `ISA_`-prefixed so the addon can never collide with Immich's ow
 | `ISA_P2P_PORT`                    | `8300` (UDP)                | The UDP port server-to-server traffic uses. Fixed on purpose: linked servers remember where they last reached you, and a fixed port keeps that true across restarts and updates, so they reconnect at once instead of waiting for you to contact them or for the relay. Nothing needs opening while the relay is on — it finds a path for you. With `ISA_RELAY=false` nothing is discovered either, so a peer can reach you only on a network you share, or through a port you forward **and** name in `ISA_ADVERTISE_ADDR`. `0` picks a random port each start, which no forward can follow. |
 | `ISA_ADVERTISE_ADDR`              | —                           | `<ipv4-or-host>:<port>` that peers are told to dial, carried in the pairing link and in share-page invite tokens. Set it whenever the addresses this container sees are not the ones a peer can reach: a forwarded UDP port (`203.0.113.7:8300`, or `home.example.com:9000` when the outside port differs), or a LAN/VPN address. A hostname travels as written and the peer resolves it again on every dial, so a dynamic (DDNS) address stays current; the resolved IP is only where the first dial starts. IPv4 only: the transport binds `0.0.0.0`. |
 | `ISA_DATA_DIR`                    | `/data`                     | Where `state.db` lives. Back this up; it holds this server's identity key — and copy the whole directory, not just `state.db` (its WAL sidecar files carry recent writes).                                                                                                                                                                                                                                                           |
+| `ISA_DATABASE_URL`                | —                           | Keep the addon's state in Postgres instead of `state.db`: `postgres://user:password@host:5432/dbname`. Unset, SQLite is used. See [Using Postgres](#using-postgres). The connection is not encrypted, so keep it on a private network. |
 | `ISA_LINK_JOIN_REQUIRES_PASSWORD` | `false`                     | Refuse to let another _server_ join from a share link that has no password. A gate on joining, not viewing — a link's own password and expiry are always enforced. Worth setting if your Immich is public.                                                                                                                                                                                                                           |
 | `ISA_PUBLISH_USER_DIRECTORY`      | `true`                      | Publish your users' names (never emails) to linked servers so they can be picked in the share menu. `false` keeps your user list private and disables native invitations from those servers, leaving share links.                                                                                                                                                                                                                    |
 | `ISA_RELAY`                       | `true`                      | If two servers can't connect directly (roughly 1 network in 10), traffic falls back through a public relay run by [n0](https://n0.computer). The relay only ever sees encrypted bytes. `false` removes the relay entirely — including the address discovery and hole punching it provides — so peers must be able to reach an address this server advertises (`ISA_ADVERTISE_ADDR`), or share a network with it. See [SETUP.md](./SETUP.md). |
@@ -27,3 +28,30 @@ Every setting is `ISA_`-prefixed so the addon can never collide with Immich's ow
 | `ISA_COMMENT_POLL_MS`             | `60000`                     | The comment lane's slow backstop. Comments are pushed the moment they are written (the proxy's Comment trigger), and a peer's `/nudge/comments` wakes the lane — this timer is what a lost push or nudge costs. |
 | `ISA_RECONCILE_DEBUG`             | `false`                     | Log every sync decision. Turn this on first if an album looks wrong.                                                                                                                                                                                                                                                                                                                                                                 |
 | `ISA_TRACE_SYNC`                  | `false`                     | Log every peer request and every call to your own Immich with its elapsed time. Turn this on when a sync appears to hang: `ISA_RECONCILE_DEBUG` says what it decided, this says which await stopped returning. One line per await, so leave it off otherwise.                                                                                                        |
+
+## Using Postgres
+
+SQLite in `ISA_DATA_DIR` is the default and needs nothing. To keep the state in Postgres instead, set
+`ISA_DATABASE_URL`. The repo ships `docker-compose.postgres.yml`, which adds a Postgres container for
+the addon on the same network:
+
+```sh
+# in .env
+ISA_DATABASE_PASSWORD=choose-a-long-password
+
+docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d
+```
+
+- **Moving an existing install.** The first start against a Postgres database that has never held a
+  store copies `state.db` into it, so the server keeps its identity, its links and its keys. `state.db`
+  is only read and stays where it is as a backup; it is not used again, and nothing is copied a second
+  time. Back it up before the first start anyway.
+- **Going back.** Unset `ISA_DATABASE_URL`. The addon reads `state.db` again, which holds what it held
+  when you left: anything that changed while on Postgres is not in it.
+- **What stays on disk.** `ISA_DATA_DIR` still holds the photo cache, so keep the volume.
+- **A password with special characters** must be percent-encoded in the URL (`@` is `%40`, `/` is `%2F`).
+- **No TLS.** The client connects without encryption and refuses a URL that demands it
+  (`sslmode=require`), so do not point it across the internet.
+- **It reaches Postgres on every start.** If the database is not up yet, the addon retries for about
+  half a minute before giving up.
+

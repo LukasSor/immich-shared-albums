@@ -44,7 +44,7 @@ picker, for the same reason. Known costs; do not make either worse without sayin
 | `main.rs` | composition root: config → state → transport → web → lanes → hello, and the shutdown signal |
 | `config.rs` | every `ISA_*` setting; strict parsing, fails loudly at boot |
 | `state.rs`, `store.rs` | in-memory collections over the database; the schema and its migrations |
-| `db/` | the one SQL surface the store talks to (`Db`, `Val`, `Row`); `db/sqlite.rs` is the backend, and SQL is written once in the subset SQLite and Postgres share |
+| `db/` | the one SQL surface the store talks to (`Db`, `Val`, `Row`); `db/sqlite.rs` is the default backend and `db/postgres.rs` the optional one (`ISA_DATABASE_URL`); SQL is written once in the subset both share, and `db/import.rs` copies a SQLite store onto Postgres once |
 | `immich/access.rs` | caller-scoped reads: which albums a credential may see |
 | `immich/admin_key.rs` | the scoped admin-account key, and what it may never do |
 | `immich/bot_avatar.rs` | the hand-drawn PNG the addon's own accounts wear |
