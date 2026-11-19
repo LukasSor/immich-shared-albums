@@ -1,5 +1,6 @@
-/** store.rs — the raw SQLite layer: schema, migrations, and every ledger. See ARCHITECTURE.md. */
-use rusqlite::{Connection, OptionalExtension};
+/** store.rs — the ledgers, schema and migrations, over whichever database `db/` opened. See ARCHITECTURE.md. */
+use crate::db::{bounded_lock, Db, Row, Step, Val};
+use crate::params;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::Mutex;
@@ -253,9 +254,11 @@ pub struct Collections {
 }
 
 pub struct Store {
-    conn: Mutex<Connection>,
+    db: Db,
     pub state: Mutex<Collections>,
 }
+
+const SEEN_COLUMNS: &str = "mapping, checksum, localAsset, originAsset, storedFull";
 
 impl Store {
     /// How many times a boot retries a contended database, and how its failures are recognised.
@@ -290,21 +293,17 @@ impl Store {
     }
 
     fn open_once(data_dir: &str) -> Result<Self, StoreError> {
-        let conn = Connection::open(Path::new(data_dir).join("state.db"))
-            .map_err(|e| StoreError::Sqlite(e.to_string()))?;
-        let mut store = Store {
-            conn: Mutex::new(conn),
-            state: Mutex::new(Collections::default()),
-        };
-        store.init()?;
-        Ok(store)
+        Self::with_db(Db::new(crate::db::sqlite::Sqlite::open(data_dir)?))
     }
 
     /// An in-memory store, for tests. Same schema and migration chain as a real one.
     pub fn open_in_memory() -> Result<Self, StoreError> {
-        let conn = Connection::open_in_memory().map_err(|e| StoreError::Sqlite(e.to_string()))?;
+        Self::with_db(Db::new(crate::db::sqlite::Sqlite::in_memory()?))
+    }
+
+    fn with_db(db: Db) -> Result<Self, StoreError> {
         let mut store = Store {
-            conn: Mutex::new(conn),
+            db,
             state: Mutex::new(Collections::default()),
         };
         store.init()?;
@@ -312,38 +311,28 @@ impl Store {
     }
 
     fn init(&mut self) -> Result<(), StoreError> {
-        // ONE lock for the whole of init, handed to free functions that take `&Connection`.
-        // Locking per helper instead deadlocks: `std::sync::Mutex` is not reentrant.
-        let conn = self.conn.lock().unwrap();
-        // The busy timeout is installed BEFORE the WAL pragma below: the pragma takes a write
-        // lock, and two concurrent boots — a restart overlapping a boot, a test booting the same
-        // directory — used to fail HERE with `database is locked`, before any timeout existed to
-        // make them wait. 5s, so a genuinely stuck lock still surfaces rather than hanging.
-        conn.busy_timeout(std::time::Duration::from_secs(5))?;
-        conn.execute_batch("PRAGMA journal_mode = WAL;")?;
-        conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS kv (name TEXT PRIMARY KEY, value TEXT NOT NULL);",
-        )?;
-        refuse_pre_v1(&conn)?;
-        let mut current = user_version(&conn)?;
-        create_schema(&conn)?;
+        let db = &self.db;
+        db.script("CREATE TABLE IF NOT EXISTS kv (name TEXT PRIMARY KEY, value TEXT NOT NULL);")?;
+        refuse_pre_v1(db)?;
+        let mut current = db.schema_version()?;
+        create_schema(db)?;
         if current == 0 {
-            set_user_version(&conn, SCHEMA_VERSION)?;
+            db.set_schema_version(SCHEMA_VERSION)?;
             current = SCHEMA_VERSION;
         }
         // v1 -> v2: the store-shared-locally flag. Additive column; create_schema's
         // IF NOT EXISTS left an existing table untouched, so an ALTER adds it.
         if current == 1 {
-            add_column_if_missing(&conn, "seen", "storedFull", "INTEGER NOT NULL DEFAULT 0")?;
-            set_user_version(&conn, 2)?;
+            db.add_column_if_missing("seen", "storedFull", "INTEGER NOT NULL DEFAULT 0")?;
+            db.set_schema_version(2)?;
             current = 2;
         }
         // v2 -> v3: the two reunification facts. Nullable and unset for every mapping that already
         // exists, because neither is true of a share made the ordinary way.
         if current == 2 {
-            add_column_if_missing(&conn, "mappings", "adopted", "INTEGER")?;
-            add_column_if_missing(&conn, "mappings", "reunified", "INTEGER")?;
-            set_user_version(&conn, 3)?;
+            db.add_column_if_missing("mappings", "adopted", "INTEGER")?;
+            db.add_column_if_missing("mappings", "reunified", "INTEGER")?;
+            db.set_schema_version(3)?;
             current = 3;
         }
         // v3 -> v4: the two DIRECTIONS of the album index get their own rows. They were keyed by
@@ -351,21 +340,20 @@ impl Store {
         // A row cannot be assigned a direction after the fact and both halves rebuild from living
         // sources, so the migration clears rather than guesses.
         if current == 3 {
-            add_column_if_missing(
-                &conn,
+            db.add_column_if_missing(
                 "published_albums",
                 "direction",
                 "TEXT NOT NULL DEFAULT 'to-them'",
             )?;
-            conn.execute_batch("DELETE FROM published_albums;")?;
-            set_user_version(&conn, 4)?;
+            db.script("DELETE FROM published_albums;")?;
+            db.set_schema_version(4)?;
             current = 4;
         }
         // v4 -> v5: the peer's DECLARED address (the hostname it keeps current). Empty for
         // peers already stored — a hint from a fresh pairing or join fills it again.
         if current == 4 {
-            add_column_if_missing(&conn, "peers", "advertisedHost", "TEXT")?;
-            set_user_version(&conn, 5)?;
+            db.add_column_if_missing("peers", "advertisedHost", "TEXT")?;
+            db.set_schema_version(5)?;
             current = 5;
         }
         if current != SCHEMA_VERSION {
@@ -376,18 +364,16 @@ impl Store {
         }
         // Indexes naming a MIGRATED column belong after the chain: a fresh table has the column,
         // a migrated one gains it in the branch above, and IF NOT EXISTS runs either way.
-        conn.execute_batch(
+        db.script(
             "CREATE INDEX IF NOT EXISTS published_albums_peer ON published_albums (peer, direction);
              CREATE INDEX IF NOT EXISTS seen_checksum ON seen (checksum);",
         )?;
-        drop(conn);
         self.load_collections()?;
         Ok(())
     }
 
     pub fn user_version(&self) -> Result<i64, StoreError> {
-        let conn = self.conn.lock().unwrap();
-        user_version(&conn)
+        self.db.schema_version()
     }
 
     // ---- kv ----
@@ -398,17 +384,17 @@ impl Store {
     }
 
     fn kv_raw(&self, name: &str) -> Result<Option<String>, StoreError> {
-        let conn = self.conn.lock().unwrap();
-        Ok(conn
-            .query_row("SELECT value FROM kv WHERE name = ?1", [name], |r| r.get(0))
-            .optional()?)
+        self.db
+            .first("SELECT value FROM kv WHERE name = ?1", params![name])?
+            .map(|row| row.text(0))
+            .transpose()
     }
 
     pub fn kv_set(&self, name: &str, value: &serde_json::Value) -> Result<(), StoreError> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute(
-            "INSERT OR REPLACE INTO kv (name, value) VALUES (?1, ?2)",
-            rusqlite::params![name, value.to_string()],
+        self.db.exec(
+            "INSERT INTO kv (name, value) VALUES (?1, ?2)
+             ON CONFLICT (name) DO UPDATE SET value = excluded.value",
+            params![name, value.to_string()],
         )?;
         Ok(())
     }
@@ -416,16 +402,13 @@ impl Store {
     // ---- the seen ledger ----
 
     pub fn seen_has(&self, mapping: &str, checksum: &str) -> Result<bool, StoreError> {
-        let conn = self.conn.lock().unwrap();
-        let n: i64 = conn.query_row(
+        Ok(self.db.count(
             "SELECT COUNT(*) FROM seen WHERE mapping = ?1 AND checksum = ?2",
-            rusqlite::params![mapping, checksum],
-            |r| r.get(0),
-        )?;
-        Ok(n > 0)
+            params![mapping, checksum],
+        )? > 0)
     }
 
-    /// `INSERT OR IGNORE`: re-adding never upgrades `storedFull`. Upgrade is remove-then-add.
+    /// `ON CONFLICT DO NOTHING`: re-adding never upgrades `storedFull`. Upgrade is remove-then-add.
     pub fn seen_add(
         &self,
         mapping: &str,
@@ -434,17 +417,10 @@ impl Store {
         origin_asset: Option<&str>,
         stored_full: bool,
     ) -> Result<(), StoreError> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute(
-            "INSERT OR IGNORE INTO seen (mapping, checksum, localAsset, originAsset, storedFull)
-             VALUES (?1, ?2, ?3, ?4, ?5)",
-            rusqlite::params![
-                mapping,
-                checksum,
-                local_asset,
-                origin_asset,
-                stored_full as i64
-            ],
+        self.db.exec(
+            "INSERT INTO seen (mapping, checksum, localAsset, originAsset, storedFull)
+             VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT DO NOTHING",
+            params![mapping, checksum, local_asset, origin_asset, stored_full],
         )?;
         Ok(())
     }
@@ -453,53 +429,54 @@ impl Store {
     /// and a materialisation row), so the ordering is the contract: a row carrying an origin wins,
     /// and among equals the newest wins.
     pub fn ledger_by_asset(&self, asset_id: &str) -> Result<Option<SeenEntry>, StoreError> {
-        let conn = self.conn.lock().unwrap();
-        Ok(conn
-            .query_row(
-                "SELECT mapping, checksum, localAsset, originAsset, storedFull FROM seen
-                 WHERE localAsset = ?1
-                 ORDER BY (originAsset IS NOT NULL) DESC, id DESC LIMIT 1",
-                [asset_id],
-                row_to_seen,
-            )
-            .optional()?)
+        self.db
+            .first(
+                &format!(
+                    "SELECT {SEEN_COLUMNS} FROM seen
+                     WHERE localAsset = ?1
+                     ORDER BY (originAsset IS NOT NULL) DESC, id DESC LIMIT 1"
+                ),
+                params![asset_id],
+            )?
+            .map(|row| row_to_seen(&row, 0))
+            .transpose()
     }
 
     /// As `ledger_by_asset`, but only a row that can be resolved to a source. A bookkeeping row
     /// with no origin cannot name what to fetch, so callers must not see one.
     pub fn ledger_with_origin(&self, asset_id: &str) -> Result<Option<SeenEntry>, StoreError> {
-        let conn = self.conn.lock().unwrap();
-        Ok(conn
-            .query_row(
-                "SELECT mapping, checksum, localAsset, originAsset, storedFull FROM seen
-                 WHERE localAsset = ?1 AND originAsset IS NOT NULL
-                 ORDER BY id DESC LIMIT 1",
-                [asset_id],
-                row_to_seen,
-            )
-            .optional()?)
+        self.db
+            .first(
+                &format!(
+                    "SELECT {SEEN_COLUMNS} FROM seen
+                     WHERE localAsset = ?1 AND originAsset IS NOT NULL
+                     ORDER BY id DESC LIMIT 1"
+                ),
+                params![asset_id],
+            )?
+            .map(|row| row_to_seen(&row, 0))
+            .transpose()
     }
 
     pub fn seen_for_mapping(&self, mapping: &str) -> Result<Vec<SeenEntry>, StoreError> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT mapping, checksum, localAsset, originAsset, storedFull FROM seen
-             WHERE mapping = ?1 ORDER BY id",
-        )?;
-        let rows = stmt.query_map([mapping], row_to_seen)?;
-        Ok(rows.filter_map(|r| r.ok()).collect())
+        self.db
+            .rows(
+                &format!("SELECT {SEEN_COLUMNS} FROM seen WHERE mapping = ?1 ORDER BY id"),
+                params![mapping],
+            )?
+            .iter()
+            .map(|row| row_to_seen(row, 0))
+            .collect()
     }
 
     /// How many of a mapping's ledger rows name a SOURCE — the stub half of a mirror. The
     /// watcher's unchanged-album handshake wants exactly this plus `offered_count`: rows without
     /// an origin are this side's own pushed photos, which `offered` already counts.
     pub fn seen_origin_count(&self, mapping: &str) -> Result<usize, StoreError> {
-        let conn = self.conn.lock().unwrap();
-        Ok(conn.query_row(
+        Ok(self.db.count(
             "SELECT COUNT(*) FROM seen WHERE mapping = ?1 AND originAsset IS NOT NULL",
-            [mapping],
-            |r| r.get::<_, i64>(0).map(|n| n as usize),
-        )?)
+            params![mapping],
+        )? as usize)
     }
 
     /// The reclaimer's window into the ledger: rows that name a SOURCE and are not stored copies,
@@ -511,26 +488,29 @@ impl Store {
         after_id: i64,
         limit: usize,
     ) -> Result<Vec<(i64, SeenEntry)>, StoreError> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT id, mapping, checksum, localAsset, originAsset, storedFull FROM seen
-             WHERE id > ?1 AND originAsset IS NOT NULL AND storedFull = 0
-             ORDER BY id LIMIT ?2",
-        )?;
-        let rows = stmt.query_map(rusqlite::params![after_id, limit as i64], |r| {
-            Ok((r.get::<_, i64>(0)?, row_to_seen(r)?))
-        })?;
-        Ok(rows.filter_map(|r| r.ok()).collect())
+        self.db
+            .rows(
+                &format!(
+                    "SELECT id, {SEEN_COLUMNS} FROM seen
+                     WHERE id > ?1 AND originAsset IS NOT NULL AND storedFull = 0
+                     ORDER BY id LIMIT ?2"
+                ),
+                params![after_id, limit],
+            )?
+            .iter()
+            .map(|row| Ok((row.int(0)?, row_to_seen(row, 1)?)))
+            .collect()
     }
 
     pub fn seen_for_checksum(&self, checksum: &str) -> Result<Vec<SeenEntry>, StoreError> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT mapping, checksum, localAsset, originAsset, storedFull FROM seen
-             WHERE checksum = ?1 ORDER BY id",
-        )?;
-        let rows = stmt.query_map([checksum], row_to_seen)?;
-        Ok(rows.filter_map(|r| r.ok()).collect())
+        self.db
+            .rows(
+                &format!("SELECT {SEEN_COLUMNS} FROM seen WHERE checksum = ?1 ORDER BY id"),
+                params![checksum],
+            )?
+            .iter()
+            .map(|row| row_to_seen(row, 0))
+            .collect()
     }
 
     /// Forget the proxies a mapping materialised. A stored-FULL copy KEEPS its row: the row is what
@@ -538,10 +518,9 @@ impl Store {
     /// interceptor serves them from the local file instead of chaining to a peer that no longer
     /// shares them. See `sync/leave.rs`.
     pub fn seen_forget_proxies(&self, mapping: &str) -> Result<(), StoreError> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute(
+        self.db.exec(
             "DELETE FROM seen WHERE mapping = ?1 AND storedFull = 0",
-            [mapping],
+            params![mapping],
         )?;
         Ok(())
     }
@@ -550,16 +529,15 @@ impl Store {
     /// are gone — unlinking deletes the peer's accounts, and `force: true` takes their assets with
     /// them, so a row left behind would claim bytes this household no longer holds.
     pub fn seen_forget_mapping(&self, mapping: &str) -> Result<(), StoreError> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute("DELETE FROM seen WHERE mapping = ?1", [mapping])?;
+        self.db
+            .exec("DELETE FROM seen WHERE mapping = ?1", params![mapping])?;
         Ok(())
     }
 
     pub fn seen_remove_entry(&self, mapping: &str, checksum: &str) -> Result<(), StoreError> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute(
+        self.db.exec(
             "DELETE FROM seen WHERE mapping = ?1 AND checksum = ?2",
-            rusqlite::params![mapping, checksum],
+            params![mapping, checksum],
         )?;
         Ok(())
     }
@@ -567,27 +545,25 @@ impl Store {
     // ---- the activity ledger ----
 
     pub fn seen_act_has(&self, tag: &str) -> Result<bool, StoreError> {
-        let conn = self.conn.lock().unwrap();
-        let n: i64 = conn.query_row(
+        Ok(self.db.count(
             "SELECT COUNT(*) FROM seen_activity WHERE tag = ?1",
-            [tag],
-            |r| r.get(0),
-        )?;
-        Ok(n > 0)
+            params![tag],
+        )? > 0)
     }
 
     pub fn seen_act_add(&self, tag: &str, mapping: &str) -> Result<(), StoreError> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute(
-            "INSERT OR IGNORE INTO seen_activity (tag, mapping) VALUES (?1, ?2)",
-            rusqlite::params![tag, mapping],
+        self.db.exec(
+            "INSERT INTO seen_activity (tag, mapping) VALUES (?1, ?2) ON CONFLICT DO NOTHING",
+            params![tag, mapping],
         )?;
         Ok(())
     }
 
     pub fn seen_act_remove_mapping(&self, mapping: &str) -> Result<(), StoreError> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute("DELETE FROM seen_activity WHERE mapping = ?1", [mapping])?;
+        self.db.exec(
+            "DELETE FROM seen_activity WHERE mapping = ?1",
+            params![mapping],
+        )?;
         Ok(())
     }
 
@@ -602,62 +578,66 @@ impl Store {
         event: &str,
         text: &str,
     ) -> Result<i64, StoreError> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute(
-            "INSERT INTO trail_pending (albumId, mappingId, event, text, at) VALUES (?1, ?2, ?3, ?4, ?5)",
-            rusqlite::params![album_id, mapping_id, event, text, crate::config::iso_now()],
-        )?;
-        Ok(conn.last_insert_rowid())
+        let row = self
+            .db
+            .first(
+                "INSERT INTO trail_pending (albumId, mappingId, event, text, at)
+                 VALUES (?1, ?2, ?3, ?4, ?5) RETURNING id",
+                params![album_id, mapping_id, event, text, crate::config::iso_now()],
+            )?
+            .ok_or_else(|| StoreError::Database("an insert returned no id".into()))?;
+        row.int(0)
     }
 
     /// Everything waiting, oldest first. Read in full because it is bounded by human-scale events
     /// (one row per join or leave) and drained on a person's visit.
     pub fn trail_pending_all(&self) -> Result<Vec<TrailRow>, StoreError> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt = conn
-            .prepare("SELECT id, albumId, mappingId, event, text FROM trail_pending ORDER BY id")?;
-        let rows = stmt.query_map([], |r| {
-            Ok(TrailRow {
-                id: r.get(0)?,
-                album_id: r.get(1)?,
-                mapping_id: r.get(2)?,
-                event: r.get(3)?,
-                text: r.get(4)?,
+        self.db
+            .rows(
+                "SELECT id, albumId, mappingId, event, text FROM trail_pending ORDER BY id",
+                &[],
+            )?
+            .iter()
+            .map(|r| {
+                Ok(TrailRow {
+                    id: r.int(0)?,
+                    album_id: r.text(1)?,
+                    mapping_id: r.text(2)?,
+                    event: r.text(3)?,
+                    text: r.text(4)?,
+                })
             })
-        })?;
-        Ok(rows.filter_map(|r| r.ok()).collect())
+            .collect()
     }
 
     /// Count one failed attempt. Returns whether the line has now been given up on — an album that
     /// is gone (deleted, or no longer visible to its owner) must not be asked about on every visit
     /// for the rest of the install's life.
     pub fn trail_pending_bump(&self, id: i64) -> Result<bool, StoreError> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute(
+        self.db.exec(
             "UPDATE trail_pending SET attempts = attempts + 1 WHERE id = ?1",
-            [id],
+            params![id],
         )?;
-        let attempts: i64 = conn.query_row(
+        let attempts = self.db.count(
             "SELECT attempts FROM trail_pending WHERE id = ?1",
-            [id],
-            |r| r.get(0),
+            params![id],
         )?;
         if attempts >= TRAIL_MAX_ATTEMPTS {
-            conn.execute("DELETE FROM trail_pending WHERE id = ?1", [id])?;
+            self.db
+                .exec("DELETE FROM trail_pending WHERE id = ?1", params![id])?;
             return Ok(true);
         }
         Ok(false)
     }
 
     pub fn trail_pending_remove(&self, id: i64) -> Result<(), StoreError> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute("DELETE FROM trail_pending WHERE id = ?1", [id])?;
+        self.db
+            .exec("DELETE FROM trail_pending WHERE id = ?1", params![id])?;
         Ok(())
     }
 
     pub fn trail_pending_count(&self) -> Result<i64, StoreError> {
-        let conn = self.conn.lock().unwrap();
-        Ok(conn.query_row("SELECT COUNT(*) FROM trail_pending", [], |r| r.get(0))?)
+        self.db.count("SELECT COUNT(*) FROM trail_pending", &[])
     }
 
     // ---- entitlement ----
@@ -666,31 +646,23 @@ impl Store {
         if asset_ids.is_empty() {
             return Ok(());
         }
-        let mut conn = self.conn.lock().unwrap();
-        let tx = conn.transaction()?;
-        {
-            let mut stmt =
-                tx.prepare("INSERT OR IGNORE INTO offered (mapping, asset) VALUES (?1, ?2)")?;
-            for asset in asset_ids {
-                stmt.execute(rusqlite::params![mapping, asset])?;
-            }
-        }
-        tx.commit()?;
-        Ok(())
+        let steps: Vec<Step> = asset_ids
+            .iter()
+            .map(|asset| Step {
+                sql: "INSERT INTO offered (mapping, asset) VALUES (?1, ?2) ON CONFLICT DO NOTHING",
+                params: vec![Val::from(mapping), Val::from(asset)],
+            })
+            .collect();
+        self.db.batch(&steps)
     }
 
     pub fn offered_allows(&self, mappings: &[String], asset_id: &str) -> Result<bool, StoreError> {
-        if mappings.is_empty() {
-            return Ok(false);
-        }
-        let conn = self.conn.lock().unwrap();
         for mapping in mappings {
-            let n: i64 = conn.query_row(
+            let found = self.db.count(
                 "SELECT COUNT(*) FROM offered WHERE mapping = ?1 AND asset = ?2",
-                rusqlite::params![mapping, asset_id],
-                |r| r.get(0),
+                params![mapping, asset_id],
             )?;
-            if n > 0 {
+            if found > 0 {
                 return Ok(true);
             }
         }
@@ -700,10 +672,14 @@ impl Store {
     /// The mappings this asset was OFFERED to — the albums to tell "look again" when the asset's
     /// own metadata is edited, since no album row moves and the version handshake cannot see it.
     pub fn offered_mappings_for(&self, asset_id: &str) -> Result<Vec<String>, StoreError> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT mapping FROM offered WHERE asset = ?1")?;
-        let rows = stmt.query_map([asset_id], |r| r.get::<_, String>(0))?;
-        Ok(rows.filter_map(|r| r.ok()).collect())
+        self.db
+            .rows(
+                "SELECT mapping FROM offered WHERE asset = ?1",
+                params![asset_id],
+            )?
+            .iter()
+            .map(|row| row.text(0))
+            .collect()
     }
 
     /// Real revocation: an asset that left the album loses its row. Returns the revoked ASSET ids,
@@ -714,28 +690,31 @@ impl Store {
         mapping: &str,
         current_asset_ids: &[String],
     ) -> Result<Vec<String>, StoreError> {
-        let mut conn = self.conn.lock().unwrap();
-        let tx = conn.transaction()?;
         let current: std::collections::HashSet<&str> =
             current_asset_ids.iter().map(String::as_str).collect();
-        let existing: Vec<String> = {
-            let mut stmt = tx.prepare("SELECT asset FROM offered WHERE mapping = ?1")?;
-            let rows = stmt.query_map([mapping], |r| r.get::<_, String>(0))?;
-            rows.filter_map(|r| r.ok()).collect()
-        };
-        let mut revoked = Vec::new();
-        for asset in existing {
-            // Set membership, not a scan: this runs per album per cycle, and albums run to
-            // thousands of assets.
-            if !current.contains(asset.as_str()) {
-                tx.execute(
-                    "DELETE FROM offered WHERE mapping = ?1 AND asset = ?2",
-                    rusqlite::params![mapping, asset],
-                )?;
-                revoked.push(asset);
-            }
-        }
-        tx.commit()?;
+        let existing: Vec<String> = self
+            .db
+            .rows(
+                "SELECT asset FROM offered WHERE mapping = ?1",
+                params![mapping],
+            )?
+            .iter()
+            .map(|row| row.text(0))
+            .collect::<Result<_, _>>()?;
+        // Set membership, not a scan: this runs per album per cycle, and albums run to
+        // thousands of assets.
+        let revoked: Vec<String> = existing
+            .into_iter()
+            .filter(|asset| !current.contains(asset.as_str()))
+            .collect();
+        let steps: Vec<Step> = revoked
+            .iter()
+            .map(|asset| Step {
+                sql: "DELETE FROM offered WHERE mapping = ?1 AND asset = ?2",
+                params: vec![Val::from(mapping), Val::from(asset)],
+            })
+            .collect();
+        self.db.batch(&steps)?;
         Ok(revoked)
     }
 
@@ -743,18 +722,15 @@ impl Store {
     /// album should hold (the stub half is the ledger), and the cheap tell that a member deleted
     /// their own contribution: the album's count shrank but nothing bumped `updatedAt`.
     pub fn offered_count(&self, mapping: &str) -> Result<usize, StoreError> {
-        let conn = self.conn.lock().unwrap();
-        let n: i64 = conn.query_row(
+        Ok(self.db.count(
             "SELECT COUNT(*) FROM offered WHERE mapping = ?1",
-            [mapping],
-            |r| r.get(0),
-        )?;
-        Ok(n as usize)
+            params![mapping],
+        )? as usize)
     }
 
     pub fn offered_remove_mapping(&self, mapping: &str) -> Result<(), StoreError> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute("DELETE FROM offered WHERE mapping = ?1", [mapping])?;
+        self.db
+            .exec("DELETE FROM offered WHERE mapping = ?1", params![mapping])?;
         Ok(())
     }
 
@@ -764,91 +740,80 @@ impl Store {
     /// between then leaves a record with no membership (we ignore a real invitation) rather than a
     /// membership with no record (which reads as human intent and shares an album nobody offered).
     pub fn added_record(&self, album: &str, user: &str) -> Result<(), StoreError> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute(
-            "INSERT OR IGNORE INTO added (album, user) VALUES (?1, ?2)",
-            rusqlite::params![album, user],
+        self.db.exec(
+            "INSERT INTO added (album, \"user\") VALUES (?1, ?2) ON CONFLICT DO NOTHING",
+            params![album, user],
         )?;
         Ok(())
     }
 
     pub fn added_has(&self, album: &str, user: &str) -> Result<bool, StoreError> {
-        let conn = self.conn.lock().unwrap();
-        let n: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM added WHERE album = ?1 AND user = ?2",
-            rusqlite::params![album, user],
-            |r| r.get(0),
-        )?;
-        Ok(n > 0)
+        Ok(self.db.count(
+            "SELECT COUNT(*) FROM added WHERE album = ?1 AND \"user\" = ?2",
+            params![album, user],
+        )? > 0)
     }
 
     pub fn added_forget(&self, album: &str, user: &str) -> Result<(), StoreError> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute(
-            "DELETE FROM added WHERE album = ?1 AND user = ?2",
-            rusqlite::params![album, user],
+        self.db.exec(
+            "DELETE FROM added WHERE album = ?1 AND \"user\" = ?2",
+            params![album, user],
         )?;
         Ok(())
     }
 
     pub fn added_albums_for(&self, user: &str) -> Result<Vec<String>, StoreError> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT album FROM added WHERE user = ?1")?;
-        let rows = stmt.query_map([user], |r| r.get::<_, String>(0))?;
-        Ok(rows.filter_map(|r| r.ok()).collect())
+        self.db
+            .rows("SELECT album FROM added WHERE \"user\" = ?1", params![user])?
+            .iter()
+            .map(|row| row.text(0))
+            .collect()
     }
 
     pub fn added_remove_user(&self, user: &str) -> Result<(), StoreError> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute("DELETE FROM added WHERE user = ?1", [user])?;
+        self.db
+            .exec("DELETE FROM added WHERE \"user\" = ?1", params![user])?;
         Ok(())
     }
 
     // ---- the byte cache's accounting ----
 
     pub fn cache_touch(&self, key: &str) -> Result<bool, StoreError> {
-        let conn = self.conn.lock().unwrap();
-        let exists: Option<i64> = conn
-            .query_row("SELECT 1 FROM cache WHERE key = ?1", [key], |r| r.get(0))
-            .optional()?;
-        if exists.is_none() {
-            return Ok(false);
-        }
-        conn.execute(
+        let changed = self.db.exec(
             "UPDATE cache SET lastUsed = ?1 WHERE key = ?2",
-            rusqlite::params![now_ms(), key],
+            params![now_ms(), key],
         )?;
-        Ok(true)
+        Ok(changed > 0)
     }
 
     pub fn cache_put(&self, key: &str, size: i64) -> Result<(), StoreError> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute(
-            "INSERT OR REPLACE INTO cache (key, size, lastUsed) VALUES (?1, ?2, ?3)",
-            rusqlite::params![key, size, now_ms()],
+        self.db.exec(
+            "INSERT INTO cache (key, size, lastUsed) VALUES (?1, ?2, ?3)
+             ON CONFLICT (key) DO UPDATE SET size = excluded.size, lastUsed = excluded.lastUsed",
+            params![key, size, now_ms()],
         )?;
         Ok(())
     }
 
     pub fn cache_total(&self) -> Result<i64, StoreError> {
-        let conn = self.conn.lock().unwrap();
-        Ok(conn.query_row("SELECT COALESCE(SUM(size), 0) FROM cache", [], |r| r.get(0))?)
+        self.db.count(
+            "SELECT CAST(COALESCE(SUM(size), 0) AS BIGINT) FROM cache",
+            &[],
+        )
     }
 
     pub fn cache_evict_oldest(&self) -> Result<Option<(String, i64)>, StoreError> {
-        let conn = self.conn.lock().unwrap();
-        let row: Option<(String, i64)> = conn
-            .query_row(
-                "SELECT key, size FROM cache ORDER BY lastUsed ASC LIMIT 1",
-                [],
-                |r| Ok((r.get(0)?, r.get(1)?)),
-            )
-            .optional()?;
-        if let Some((key, size)) = &row {
-            conn.execute("DELETE FROM cache WHERE key = ?1", [key])?;
-            return Ok(Some((key.clone(), *size)));
-        }
-        Ok(None)
+        let Some(row) = self.db.first(
+            "SELECT key, size FROM cache ORDER BY lastUsed ASC LIMIT 1",
+            &[],
+        )?
+        else {
+            return Ok(None);
+        };
+        let (key, size) = (row.text(0)?, row.int(1)?);
+        self.db
+            .exec("DELETE FROM cache WHERE key = ?1", params![&key])?;
+        Ok(Some((key, size)))
     }
 
     // ---- the album index ----
@@ -860,15 +825,16 @@ impl Store {
         owner_user_id: &str,
         albums: &[OwnedAlbum],
     ) -> Result<(), StoreError> {
-        let mut conn = self.conn.lock().unwrap();
-        let tx = conn.transaction()?;
-        tx.execute(
-            "DELETE FROM published_albums WHERE peer = ?1 AND direction = ?2 AND ownerUserId = ?3",
-            rusqlite::params![peer, direction.as_str(), owner_user_id],
-        )?;
-        insert_published(&tx, peer, direction, owner_user_id, albums)?;
-        tx.commit()?;
-        Ok(())
+        let mut steps = vec![Step {
+            sql: "DELETE FROM published_albums WHERE peer = ?1 AND direction = ?2 AND ownerUserId = ?3",
+            params: vec![
+                Val::from(peer),
+                Val::from(direction.as_str()),
+                Val::from(owner_user_id),
+            ],
+        }];
+        steps.extend(published_inserts(peer, direction, owner_user_id, albums));
+        self.db.batch(&steps)
     }
 
     /// Replace a peer's WHOLE index for one direction. Silence about an owner clears them, which
@@ -879,18 +845,14 @@ impl Store {
         direction: Direction,
         albums: &[OwnedAlbum],
     ) -> Result<(), StoreError> {
-        let mut conn = self.conn.lock().unwrap();
-        let tx = conn.transaction()?;
-        tx.execute(
-            "DELETE FROM published_albums WHERE peer = ?1 AND direction = ?2",
-            rusqlite::params![peer, direction.as_str()],
-        )?;
-        let by_owner = group_by_owner(albums);
-        for (owner, group) in by_owner {
-            insert_published(&tx, peer, direction, &owner, &group)?;
+        let mut steps = vec![Step {
+            sql: "DELETE FROM published_albums WHERE peer = ?1 AND direction = ?2",
+            params: vec![Val::from(peer), Val::from(direction.as_str())],
+        }];
+        for (owner, group) in group_by_owner(albums) {
+            steps.extend(published_inserts(peer, direction, &owner, &group));
         }
-        tx.commit()?;
-        Ok(())
+        self.db.batch(&steps)
     }
 
     pub fn published_albums_for(
@@ -898,137 +860,136 @@ impl Store {
         peer: &str,
         direction: Direction,
     ) -> Result<Vec<OwnedAlbum>, StoreError> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT name, assetCount, startDate, endDate, ownerName, ownerUserId
-             FROM published_albums WHERE peer = ?1 AND direction = ?2 ORDER BY name",
-        )?;
-        let rows = stmt.query_map(rusqlite::params![peer, direction.as_str()], |r| {
-            Ok(OwnedAlbum {
-                id: String::new(),
-                name: r.get(0)?,
-                asset_count: r.get(1)?,
-                start_date: r.get(2)?,
-                end_date: r.get(3)?,
-                owner_name: r.get(4)?,
-                owner_user_id: r.get(5).ok(),
+        self.db
+            .rows(
+                "SELECT name, assetCount, startDate, endDate, ownerName, ownerUserId
+                 FROM published_albums WHERE peer = ?1 AND direction = ?2 ORDER BY name",
+                params![peer, direction.as_str()],
+            )?
+            .iter()
+            .map(|r| {
+                Ok(OwnedAlbum {
+                    id: String::new(),
+                    name: r.text(0)?,
+                    asset_count: r.int(1)?,
+                    start_date: r.opt_text(2)?,
+                    end_date: r.opt_text(3)?,
+                    owner_name: r.text(4)?,
+                    owner_user_id: r.opt_text(5)?,
+                })
             })
-        })?;
-        Ok(rows.filter_map(|r| r.ok()).collect())
+            .collect()
     }
 
     // ---- collections ----
 
     fn load_collections(&self) -> Result<(), StoreError> {
-        let peers: Vec<Peer> = {
-            let conn = self.conn.lock().unwrap();
-            let mut stmt = conn.prepare(
+        let peers: Vec<Peer> = self
+            .db
+            .rows(
                 "SELECT pub, name, version, protocol, features, via, firstSeenAt, relayHint, lastAddrs, advertisedHost FROM peers",
-            )?;
-            let rows = stmt.query_map([], |r| {
+                &[],
+            )?
+            .iter()
+            .map(|r| {
                 Ok(Peer {
-                    pub_key: r.get(0)?,
-                    name: r.get(1)?,
-                    version: r.get(2)?,
-                    protocol: r.get(3)?,
-                    features: r
-                        .get::<_, Option<String>>(4)?
-                        .and_then(|s| serde_json::from_str(&s).ok()),
-                    via: r.get(5)?,
-                    first_seen_at: r.get(6)?,
-                    relay_hint: r.get(7)?,
-                    last_addrs: r
-                        .get::<_, Option<String>>(8)?
-                        .and_then(|s| serde_json::from_str(&s).ok()),
-                    advertised_host: r.get(9)?,
+                    pub_key: r.text(0)?,
+                    name: r.text(1)?,
+                    version: r.opt_text(2)?,
+                    protocol: r.opt_int(3)?,
+                    features: r.opt_text(4)?.and_then(|s| serde_json::from_str(&s).ok()),
+                    via: r.text(5)?,
+                    first_seen_at: r.text(6)?,
+                    relay_hint: r.opt_text(7)?,
+                    last_addrs: r.opt_text(8)?.and_then(|s| serde_json::from_str(&s).ok()),
+                    advertised_host: r.opt_text(9)?,
                 })
-            })?;
-            rows.filter_map(|r| r.ok()).collect()
-        };
+            })
+            .collect::<Result<_, StoreError>>()?;
 
-        let mappings: Vec<Mapping> = {
-            let conn = self.conn.lock().unwrap();
-            let mut stmt = conn.prepare(
+        // A row that failed to classify (or decode) must FAIL THE LOAD, never silently
+        // vanish: the row is absent from memory, and the next `save()` rewrites this table
+        // from memory — a dropped row here would be DELETED there, and a mapping the
+        // sidecar can no longer see is a live share nobody can withdraw. Same doctrine as
+        // the version refusal: migrated or refused, never guessed at.
+        let mappings: Vec<Mapping> = self
+            .db
+            .rows(
                 "SELECT id, role, albumId, albumName, peer, remoteAlbumId, remoteMappingId, permissions,
                         hostSlug, via, forPeerUserIds, albumOwnerName, albumOwnerId, adopted, reunified,
                         dead, deadAt, deadReason, failCount, localVersion, remoteVersion, commentCount,
                         remoteCommentCount FROM mappings",
-            )?;
-            let rows = stmt.query_map([], |r| {
-                let id: String = r.get(0)?;
-                let role: String = r.get(1)?;
+                &[],
+            )?
+            .iter()
+            .map(|r| {
+                let id = r.text(0)?;
+                let role = r.text(1)?;
                 let Some(role) = Role::parse(&role) else {
                     // Fail towards under-sharing: a mapping that cannot be classified is not
                     // loaded, so nothing origin-side ever reads it as an owner mapping.
                     crate::log!(
                         "mappings row {id} carries role \"{role}\" — not \"owner\" or \"member\"; refusing to load it"
                     );
-                    return Err(rusqlite::Error::InvalidColumnType(
-                        1,
-                        "role".into(),
-                        rusqlite::types::Type::Text,
+                    return Err(StoreError::Corrupt(
+                        "a mappings row could not be loaded (invalid role)".into(),
                     ));
                 };
                 Ok(Mapping {
                     id,
                     role,
-                    album_id: r.get(2)?,
-                    album_name: r.get(3)?,
-                    peer: r.get(4)?,
-                    remote_album_id: r.get(5)?,
-                    remote_mapping_id: r.get(6)?,
-                    permissions: r.get(7)?,
-                    host_slug: r.get(8)?,
-                    via: r.get(9)?,
-                    for_peer_user_ids: r
-                        .get::<_, Option<String>>(10)?
-                        .and_then(|s| serde_json::from_str(&s).ok()),
-                    album_owner_name: r.get(11)?,
-                    album_owner_id: r.get(12)?,
+                    album_id: r.text(2)?,
+                    album_name: r.text(3)?,
+                    peer: r.text(4)?,
+                    remote_album_id: r.opt_text(5)?,
+                    remote_mapping_id: r.opt_text(6)?,
+                    permissions: r.text(7)?,
+                    host_slug: r.opt_text(8)?,
+                    via: r.text(9)?,
+                    for_peer_user_ids: r.opt_text(10)?.and_then(|s| serde_json::from_str(&s).ok()),
+                    album_owner_name: r.opt_text(11)?,
+                    album_owner_id: r.opt_text(12)?,
                     // Tri-state: NULL stays None, and 0/1 map to Some(false)/Some(true).
-                    adopted: r.get::<_, Option<i64>>(13)?.map(|v| v != 0),
-                    reunified: r.get::<_, Option<i64>>(14)?.map(|v| v != 0),
-                    dead: r.get::<_, i64>(15)? != 0,
-                    dead_at: r.get(16)?,
-                    dead_reason: r.get(17)?,
-                    fail_count: r.get(18)?,
-                    local_version: r.get(19)?,
-                    remote_version: r.get(20)?,
-                    comment_count: r.get(21)?,
-                    remote_comment_count: r.get(22)?,
+                    adopted: r.opt_flag(13)?,
+                    reunified: r.opt_flag(14)?,
+                    dead: r.flag(15)?,
+                    dead_at: r.opt_text(16)?,
+                    dead_reason: r.opt_text(17)?,
+                    fail_count: r.opt_int(18)?,
+                    local_version: r.opt_text(19)?,
+                    remote_version: r.opt_text(20)?,
+                    comment_count: r.opt_int(21)?,
+                    remote_comment_count: r.opt_int(22)?,
                 })
+            })
+            .collect::<Result<_, StoreError>>()
+            .map_err(|e| match e {
+                StoreError::Corrupt(_) => e,
+                other => StoreError::Corrupt(format!("a mappings row could not be loaded ({other})")),
             })?;
-            // A row that failed to classify (or decode) must FAIL THE LOAD, never silently
-            // vanish: the row is absent from memory, and the next `save()` rewrites this table
-            // from memory — a dropped row here would be DELETED there, and a mapping the
-            // sidecar can no longer see is a live share nobody can withdraw. Same doctrine as
-            // the version refusal: migrated or refused, never guessed at.
-            rows.collect::<Result<Vec<Mapping>, _>>().map_err(|e| {
-                StoreError::Corrupt(format!("a mappings row could not be loaded ({e})"))
-            })?
-        };
 
-        let contributors: std::collections::HashMap<String, Contributor> = {
-            let conn = self.conn.lock().unwrap();
-            let mut stmt = conn.prepare(
+        let contributors: std::collections::HashMap<String, Contributor> = self
+            .db
+            .rows(
                 "SELECT slug, userId, apiKey, password, avatarDone, viaPeer, peerUserId, homePeer FROM contributors",
-            )?;
-            let rows = stmt.query_map([], |r| {
+                &[],
+            )?
+            .iter()
+            .map(|r| {
                 Ok((
-                    r.get::<_, String>(0)?,
+                    r.text(0)?,
                     Contributor {
-                        user_id: r.get(1)?,
-                        api_key: r.get(2)?,
-                        password: r.get(3)?,
-                        avatar_done: r.get::<_, i64>(4)? != 0,
-                        via_peer: r.get(5)?,
-                        peer_user_id: r.get(6)?,
-                        home_peer: r.get(7)?,
+                        user_id: r.text(1)?,
+                        api_key: r.text(2)?,
+                        password: r.opt_text(3)?,
+                        avatar_done: r.flag(4)?,
+                        via_peer: r.opt_text(5)?,
+                        peer_user_id: r.opt_text(6)?,
+                        home_peer: r.opt_text(7)?,
                     },
                 ))
-            })?;
-            rows.filter_map(|r| r.ok()).collect()
-        };
+            })
+            .collect::<Result<_, StoreError>>()?;
 
         let identity: Option<Identity> = self
             .kv_raw("identity")?
@@ -1048,122 +1009,122 @@ impl Store {
     /// contributors. It does NOT touch seen, seen_activity, offered, added, cache or
     /// published_albums — those are written per-row as they happen.
     pub fn save(&self) -> Result<(), StoreError> {
-        // BOUNDED, and loud on failure. Both locks here are non-reentrant `std::sync::Mutex`es, so
-        // a caller that already holds one through `collections()` deadlocks against itself — and a
+        // BOUNDED, and loud on failure. The state lock is a non-reentrant `std::sync::Mutex`, so
+        // a caller that already holds it through `collections()` deadlocks against itself — and a
         // deadlocked sidecar simply stops answering, which reads as a mysterious hang rather than a
         // bug. Normal contention clears in microseconds, so a wait that outlives the bound was
-        // never going to succeed; naming it turns a silent hang into a named failure. The second
-        // lock is the worse one: a caller blocked there already holds `state`, so every other task
-        // queues behind it and the whole sidecar goes quiet.
+        // never going to succeed; naming it turns a silent hang into a named failure.
         let state = bounded_lock(&self.state, "nothing yet", "the state lock");
-        let mut conn = bounded_lock(&self.conn, "the state lock", "the database");
-        let tx = conn.transaction()?;
+        let mut steps: Vec<Step> = Vec::new();
         if let Some(identity) = &state.identity {
-            tx.execute(
-                "INSERT OR REPLACE INTO kv (name, value) VALUES ('identity', ?1)",
-                [serde_json::to_string(identity)
-                    .expect("Identity is a plain struct: serialization cannot fail")],
-            )?;
+            steps.push(Step {
+                sql: "INSERT INTO kv (name, value) VALUES ('identity', ?1)
+                      ON CONFLICT (name) DO UPDATE SET value = excluded.value",
+                params: vec![Val::from(
+                    serde_json::to_string(identity)
+                        .expect("Identity is a plain struct: serialization cannot fail"),
+                )],
+            });
         }
-        tx.execute("DELETE FROM peers", [])?;
+        steps.push(Step {
+            sql: "DELETE FROM peers",
+            params: vec![],
+        });
         for p in &state.peers {
-            tx.execute(
-                "INSERT INTO peers (pub, name, version, protocol, features, via, firstSeenAt, relayHint, lastAddrs, advertisedHost)
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
-                rusqlite::params![
-                    p.pub_key, p.name, p.version, p.protocol,
-                    p.features.as_ref().map(|f| serde_json::to_string(f).unwrap_or_default()),
-                    p.via, p.first_seen_at, p.relay_hint,
-                    p.last_addrs.as_ref().map(|a| serde_json::to_string(a).unwrap_or_default()),
-                    p.advertised_host,
+            steps.push(Step {
+                sql: "INSERT INTO peers (pub, name, version, protocol, features, via, firstSeenAt, relayHint, lastAddrs, advertisedHost)
+                      VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+                params: vec![
+                    Val::from(&p.pub_key),
+                    Val::from(&p.name),
+                    Val::from(p.version.clone()),
+                    Val::from(p.protocol),
+                    Val::from(p.features.as_ref().map(|f| serde_json::to_string(f).unwrap_or_default())),
+                    Val::from(&p.via),
+                    Val::from(&p.first_seen_at),
+                    Val::from(p.relay_hint.clone()),
+                    Val::from(p.last_addrs.as_ref().map(|a| serde_json::to_string(a).unwrap_or_default())),
+                    Val::from(p.advertised_host.clone()),
                 ],
-            )?;
+            });
         }
-        tx.execute("DELETE FROM mappings", [])?;
+        steps.push(Step {
+            sql: "DELETE FROM mappings",
+            params: vec![],
+        });
         for m in &state.mappings {
-            tx.execute(
-                "INSERT INTO mappings (id, role, albumId, albumName, peer, remoteAlbumId, remoteMappingId,
-                  permissions, hostSlug, via, forPeerUserIds, albumOwnerName, albumOwnerId, adopted,
-                  reunified, dead, deadAt, deadReason, failCount, localVersion, remoteVersion,
-                  commentCount, remoteCommentCount)
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23)",
-                rusqlite::params![
-                    m.id, m.role.as_str(), m.album_id, m.album_name, m.peer,
-                    m.remote_album_id, m.remote_mapping_id, m.permissions, m.host_slug, m.via,
-                    m.for_peer_user_ids.as_ref().map(|v| serde_json::to_string(v).unwrap_or_default()),
-                    m.album_owner_name, m.album_owner_id,
+            steps.push(Step {
+                sql: "INSERT INTO mappings (id, role, albumId, albumName, peer, remoteAlbumId, remoteMappingId,
+                       permissions, hostSlug, via, forPeerUserIds, albumOwnerName, albumOwnerId, adopted,
+                       reunified, dead, deadAt, deadReason, failCount, localVersion, remoteVersion,
+                       commentCount, remoteCommentCount)
+                      VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23)",
+                params: vec![
+                    Val::from(&m.id),
+                    Val::from(m.role.as_str()),
+                    Val::from(&m.album_id),
+                    Val::from(&m.album_name),
+                    Val::from(&m.peer),
+                    Val::from(m.remote_album_id.clone()),
+                    Val::from(m.remote_mapping_id.clone()),
+                    Val::from(&m.permissions),
+                    Val::from(m.host_slug.clone()),
+                    Val::from(&m.via),
+                    Val::from(m.for_peer_user_ids.as_ref().map(|v| serde_json::to_string(v).unwrap_or_default())),
+                    Val::from(m.album_owner_name.clone()),
+                    Val::from(m.album_owner_id.clone()),
                     // Tri-state written as NULL, never 0.
-                    m.adopted.map(|b| b as i64),
-                    m.reunified.map(|b| b as i64),
-                    m.dead as i64, m.dead_at, m.dead_reason, m.fail_count,
-                    m.local_version, m.remote_version, m.comment_count, m.remote_comment_count,
+                    Val::from(m.adopted),
+                    Val::from(m.reunified),
+                    Val::from(m.dead),
+                    Val::from(m.dead_at.clone()),
+                    Val::from(m.dead_reason.clone()),
+                    Val::from(m.fail_count),
+                    Val::from(m.local_version.clone()),
+                    Val::from(m.remote_version.clone()),
+                    Val::from(m.comment_count),
+                    Val::from(m.remote_comment_count),
                 ],
-            )?;
+            });
         }
-        tx.execute("DELETE FROM contributors", [])?;
+        steps.push(Step {
+            sql: "DELETE FROM contributors",
+            params: vec![],
+        });
         for (slug, c) in &state.contributors {
-            tx.execute(
-                "INSERT INTO contributors (slug, userId, apiKey, password, avatarDone, viaPeer, peerUserId, homePeer)
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
-                rusqlite::params![
-                    slug,
-                    c.user_id.clone(),
-                    c.api_key.clone(),
-                    c.password, c.avatar_done as i64, c.via_peer, c.peer_user_id, c.home_peer,
+            steps.push(Step {
+                sql: "INSERT INTO contributors (slug, userId, apiKey, password, avatarDone, viaPeer, peerUserId, homePeer)
+                      VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+                params: vec![
+                    Val::from(slug),
+                    Val::from(&c.user_id),
+                    Val::from(&c.api_key),
+                    Val::from(c.password.clone()),
+                    Val::from(c.avatar_done),
+                    Val::from(c.via_peer.clone()),
+                    Val::from(c.peer_user_id.clone()),
+                    Val::from(c.home_peer.clone()),
                 ],
-            )?;
+            });
         }
-        tx.commit()?;
-        Ok(())
+        self.db.batch(&steps)
     }
 }
 
 /// A pre-v1 store is refused with an actionable message rather than migrated: it holds nothing
 /// worth keeping and the old shape cannot be reconstructed faithfully.
-fn refuse_pre_v1(conn: &Connection) -> Result<(), StoreError> {
-    let has_keys: Option<String> = conn
-        .query_row("SELECT value FROM kv WHERE name = 'keys'", [], |r| r.get(0))
-        .optional()?;
-    if has_keys.is_some() {
+fn refuse_pre_v1(db: &Db) -> Result<(), StoreError> {
+    if db
+        .first("SELECT value FROM kv WHERE name = 'keys'", &[])?
+        .is_some()
+    {
         return Err(StoreError::PreV1);
     }
     Ok(())
 }
 
-fn user_version(conn: &Connection) -> Result<i64, StoreError> {
-    Ok(conn.query_row("PRAGMA user_version", [], |r| r.get(0))?)
-}
-
-fn set_user_version(conn: &Connection, v: i64) -> Result<(), StoreError> {
-    conn.execute_batch(&format!("PRAGMA user_version = {v};"))?;
-    Ok(())
-}
-
-/// Exists because `create_schema` runs BEFORE the migration chain: on an already-provisioned store
-/// the migrated column may already be present, and a bare ALTER dies with "duplicate column name".
-/// Re-running the chain on a migrated store must be a no-op.
-fn add_column_if_missing(
-    conn: &Connection,
-    table: &str,
-    column: &str,
-    definition: &str,
-) -> Result<(), StoreError> {
-    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
-    let existing: Vec<String> = stmt
-        .query_map([], |r| r.get::<_, String>(1))?
-        .filter_map(|r| r.ok())
-        .collect();
-    drop(stmt);
-    if !existing.iter().any(|c| c == column) {
-        conn.execute_batch(&format!(
-            "ALTER TABLE {table} ADD COLUMN {column} {definition};"
-        ))?;
-    }
-    Ok(())
-}
-
-fn create_schema(conn: &Connection) -> Result<(), StoreError> {
-    conn.execute_batch(
+fn create_schema(db: &Db) -> Result<(), StoreError> {
+    db.script(
         "
         CREATE TABLE IF NOT EXISTS seen (
           id INTEGER PRIMARY KEY,
@@ -1199,9 +1160,9 @@ fn create_schema(conn: &Connection) -> Result<(), StoreError> {
         );
         CREATE UNIQUE INDEX IF NOT EXISTS offered_mapping_asset ON offered (mapping, asset);
         CREATE INDEX IF NOT EXISTS offered_asset ON offered (asset);
-        CREATE TABLE IF NOT EXISTS added (album TEXT NOT NULL, user TEXT NOT NULL);
-        CREATE UNIQUE INDEX IF NOT EXISTS added_album_user ON added (album, user);
-        CREATE INDEX IF NOT EXISTS added_user ON added (user);
+        CREATE TABLE IF NOT EXISTS added (album TEXT NOT NULL, \"user\" TEXT NOT NULL);
+        CREATE UNIQUE INDEX IF NOT EXISTS added_album_user ON added (album, \"user\");
+        CREATE INDEX IF NOT EXISTS added_user ON added (\"user\");
         CREATE TABLE IF NOT EXISTS peers (
           pub TEXT PRIMARY KEY,
           name TEXT NOT NULL,
@@ -1265,34 +1226,39 @@ fn create_schema(conn: &Connection) -> Result<(), StoreError> {
     Ok(())
 }
 
-fn row_to_seen(r: &rusqlite::Row<'_>) -> rusqlite::Result<SeenEntry> {
+fn row_to_seen(r: &Row, first: usize) -> Result<SeenEntry, StoreError> {
     Ok(SeenEntry {
-        mapping: r.get(0)?,
-        checksum: r.get(1)?,
-        local_asset: r.get(2)?,
-        origin_asset: r.get(3)?,
-        stored_full: r.get::<_, i64>(4)? != 0,
+        mapping: r.text(first)?,
+        checksum: r.text(first + 1)?,
+        local_asset: r.text(first + 2)?,
+        origin_asset: r.opt_text(first + 3)?,
+        stored_full: r.flag(first + 4)?,
     })
 }
 
-fn insert_published(
-    tx: &rusqlite::Transaction<'_>,
+fn published_inserts<'a>(
     peer: &str,
     direction: Direction,
     owner_user_id: &str,
     albums: &[OwnedAlbum],
-) -> Result<(), StoreError> {
-    for a in albums {
-        tx.execute(
-            "INSERT INTO published_albums (peer, direction, ownerUserId, name, assetCount, startDate, endDate, ownerName)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
-            rusqlite::params![
-                peer, direction.as_str(), owner_user_id, a.name, a.asset_count,
-                a.start_date, a.end_date, a.owner_name,
+) -> Vec<Step<'a>> {
+    albums
+        .iter()
+        .map(|a| Step {
+            sql: "INSERT INTO published_albums (peer, direction, ownerUserId, name, assetCount, startDate, endDate, ownerName)
+                  VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+            params: vec![
+                Val::from(peer),
+                Val::from(direction.as_str()),
+                Val::from(owner_user_id),
+                Val::from(&a.name),
+                Val::from(a.asset_count),
+                Val::from(a.start_date.clone()),
+                Val::from(a.end_date.clone()),
+                Val::from(&a.owner_name),
             ],
-        )?;
-    }
-    Ok(())
+        })
+        .collect()
 }
 
 fn group_by_owner(albums: &[OwnedAlbum]) -> Vec<(String, Vec<OwnedAlbum>)> {
@@ -1327,47 +1293,18 @@ fn now_ms() -> i64 {
 #[derive(Debug)]
 pub enum StoreError {
     Sqlite(String),
+    Database(String),
     Io(String),
     PreV1,
     Corrupt(String),
     SchemaVersion { found: i64, expected: i64 },
 }
 
-/// Take a non-reentrant lock, refusing to spin forever: once the wait outlives `SAVE_LOCK_WAIT`
-/// the failure is NAMED (a self-deadlock or severe contention — the deadlock class this port has
-/// hit repeatedly), and the ordinary blocking lock is taken as the log says, so the caller either
-/// proceeds or blocks visibly instead of spinning silently for ever. Poison is recovered because a
-/// poisoned lock here means a task panicked mid-save; the last committed data still stands and
-/// refusing it would lose every later write.
-fn bounded_lock<'a, T>(
-    mutex: &'a Mutex<T>,
-    held: &str,
-    waiting_for: &str,
-) -> std::sync::MutexGuard<'a, T> {
-    const SAVE_LOCK_WAIT: std::time::Duration = std::time::Duration::from_secs(3);
-    const RETRY_SLEEP: std::time::Duration = std::time::Duration::from_millis(5);
-    let deadline = std::time::Instant::now() + SAVE_LOCK_WAIT;
-    loop {
-        match mutex.try_lock() {
-            Ok(guard) => return guard,
-            Err(std::sync::TryLockError::Poisoned(e)) => return e.into_inner(),
-            Err(std::sync::TryLockError::WouldBlock) => {
-                if std::time::Instant::now() >= deadline {
-                    crate::log!(
-                        "SAVE blocked {SAVE_LOCK_WAIT:?} waiting for {waiting_for} while holding {held} — every other task is blocked behind this one. Blocking as normal, but this is the bug."
-                    );
-                    return mutex.lock().unwrap_or_else(|e| e.into_inner());
-                }
-                std::thread::sleep(RETRY_SLEEP);
-            }
-        }
-    }
-}
-
 impl std::fmt::Display for StoreError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             StoreError::Sqlite(e) => write!(f, "sqlite: {e}"),
+            StoreError::Database(e) => write!(f, "database: {e}"),
             StoreError::Io(e) => write!(f, "io: {e}"),
             StoreError::PreV1 => write!(
                 f,
@@ -1398,6 +1335,7 @@ impl From<rusqlite::Error> for StoreError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rusqlite::Connection;
 
     /// Two boots racing one directory used to fail with `database is locked`: the WAL pragma took
     /// a write lock before the busy timeout existed. Now every boot waits its turn and all of
@@ -1675,23 +1613,22 @@ mod tests {
         };
         s.state.lock().unwrap().mappings = vec![m(None)];
         s.save().unwrap();
-        let conn = s.conn.lock().unwrap();
-        let stored: Option<i64> = conn
-            .query_row("SELECT adopted FROM mappings WHERE id = 'm1'", [], |r| {
-                r.get(0)
-            })
-            .unwrap();
+        let stored =
+            s.db.first("SELECT adopted FROM mappings WHERE id = 'm1'", &[])
+                .unwrap()
+                .unwrap()
+                .opt_int(0)
+                .unwrap();
         assert_eq!(stored, None, "unset must be SQL NULL, never 0");
-        drop(conn);
 
         s.state.lock().unwrap().mappings = vec![m(Some(true))];
         s.save().unwrap();
-        let conn = s.conn.lock().unwrap();
-        let stored: Option<i64> = conn
-            .query_row("SELECT adopted FROM mappings WHERE id = 'm1'", [], |r| {
-                r.get(0)
-            })
-            .unwrap();
+        let stored =
+            s.db.first("SELECT adopted FROM mappings WHERE id = 'm1'", &[])
+                .unwrap()
+                .unwrap()
+                .opt_int(0)
+                .unwrap();
         assert_eq!(stored, Some(1));
     }
 

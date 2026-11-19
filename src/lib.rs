@@ -1,5 +1,6 @@
 /** lib.rs — the sidecar as a library, so integration tests and examples can drive it. See ARCHITECTURE.md. */
 pub mod config;
+pub mod db;
 pub mod immich;
 pub mod media;
 pub mod p2p;
