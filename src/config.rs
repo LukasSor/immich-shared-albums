@@ -23,6 +23,7 @@ pub struct Config {
     pub port: u16,
     pub p2p_port: u16,
     pub data_dir: String,
+    pub database_url: Option<String>,
     pub sync_poll_ms: u64,
     pub comment_poll_ms: u64,
     pub mirror_album_template: String,
@@ -49,6 +50,10 @@ impl std::fmt::Debug for Config {
             .field("port", &self.port)
             .field("p2p_port", &self.p2p_port)
             .field("data_dir", &self.data_dir)
+            .field(
+                "database_url",
+                &self.database_url.as_ref().map(|_| "[REDACTED]"),
+            )
             .field("sync_poll_ms", &self.sync_poll_ms)
             .field("comment_poll_ms", &self.comment_poll_ms)
             .field("mirror_album_template", &self.mirror_album_template)
@@ -172,6 +177,7 @@ impl Config {
             // random port makes that memory wrong across a restart. 0 restores a random port.
             p2p_port: env_port("ISA_P2P_PORT", 8300, 0)?,
             data_dir: env_str("ISA_DATA_DIR", "/data"),
+            database_url: Some(env_str("ISA_DATABASE_URL", "")).filter(|url| !url.is_empty()),
             // Nudges are the real path (a peer's channel nudge wakes its lane); these timers are
             // the slow backstop for a LOST nudge, so minutes. An operator can shorten them, but a
             // lost nudge should be the only thing the shortening buys.
@@ -459,6 +465,7 @@ pub fn install_test_config() {
             port: 8300,
             p2p_port: 8300,
             data_dir: "/tmp/isa-test-data".into(),
+            database_url: None,
             sync_poll_ms: 120_000,
             comment_poll_ms: 60_000,
             mirror_album_template: "{name}".into(),

@@ -1,4 +1,6 @@
 /** db/mod.rs — the one SQL surface the store talks to; SQLite and Postgres each implement it. See ARCHITECTURE.md. */
+pub mod import;
+pub mod postgres;
 pub mod sqlite;
 
 use crate::store::StoreError;
@@ -137,6 +139,9 @@ pub trait Backend: Send + Sync {
         column: &str,
         definition: &str,
     ) -> Result<(), StoreError>;
+    fn reset_id_sequences(&self, _tables: &[&str]) -> Result<(), StoreError> {
+        Ok(())
+    }
 }
 
 pub struct Db(Box<dyn Backend>);
@@ -185,6 +190,10 @@ impl Db {
         definition: &str,
     ) -> Result<(), StoreError> {
         self.0.add_column_if_missing(table, column, definition)
+    }
+
+    pub fn reset_id_sequences(&self, tables: &[&str]) -> Result<(), StoreError> {
+        self.0.reset_id_sequences(tables)
     }
 }
 

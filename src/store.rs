@@ -293,30 +293,71 @@ impl Store {
     }
 
     fn open_once(data_dir: &str) -> Result<Self, StoreError> {
-        Self::with_db(Db::new(crate::db::sqlite::Sqlite::open(data_dir)?))
+        Self::with_db(Db::new(crate::db::sqlite::Sqlite::open(data_dir)?), None)
+    }
+
+    /// Open the store on Postgres. A database that has never held a store takes a one-time copy of
+    /// `state.db` when one is there, so moving off SQLite keeps this server's identity, its links and
+    /// every key; `state.db` itself is only read.
+    pub fn open_postgres(data_dir: &str, url: &str) -> Result<Self, StoreError> {
+        let db = Db::new(crate::db::postgres::Postgres::connect(url)?);
+        let fresh = db.schema_version()? == 0;
+        let source = Path::new(data_dir).join("state.db");
+        if fresh && source.exists() {
+            crate::log!(
+                "this database is new — copying {} into it",
+                source.display()
+            );
+            let old = Self::open(data_dir)?;
+            return Self::with_db(db, Some(&old.db));
+        }
+        Self::with_db(db, None)
+    }
+
+    /// The store the tests run on: Postgres in its own schema when `ISA_TEST_POSTGRES_URL` is set, so
+    /// the same tests prove both backends, and in-memory SQLite otherwise.
+    #[cfg(test)]
+    pub fn open_for_tests() -> Self {
+        match std::env::var("ISA_TEST_POSTGRES_URL") {
+            Ok(url) if !url.is_empty() => Self::with_db(
+                Db::new(crate::db::postgres::Postgres::connect_isolated(&url)),
+                None,
+            )
+            .expect("a Postgres store"),
+            _ => Self::open_in_memory().expect("in-memory store"),
+        }
+    }
+
+    /// The database this store is on, for the copy between backends and for tests.
+    pub fn raw_db(&self) -> &Db {
+        &self.db
     }
 
     /// An in-memory store, for tests. Same schema and migration chain as a real one.
     pub fn open_in_memory() -> Result<Self, StoreError> {
-        Self::with_db(Db::new(crate::db::sqlite::Sqlite::in_memory()?))
+        Self::with_db(Db::new(crate::db::sqlite::Sqlite::in_memory()?), None)
     }
 
-    fn with_db(db: Db) -> Result<Self, StoreError> {
+    fn with_db(db: Db, import_from: Option<&Db>) -> Result<Self, StoreError> {
         let mut store = Store {
             db,
             state: Mutex::new(Collections::default()),
         };
-        store.init()?;
+        store.init(import_from)?;
         Ok(store)
     }
 
-    fn init(&mut self) -> Result<(), StoreError> {
+    fn init(&mut self, import_from: Option<&Db>) -> Result<(), StoreError> {
         let db = &self.db;
         db.script("CREATE TABLE IF NOT EXISTS kv (name TEXT PRIMARY KEY, value TEXT NOT NULL);")?;
         refuse_pre_v1(db)?;
         let mut current = db.schema_version()?;
         create_schema(db)?;
         if current == 0 {
+            if let Some(source) = import_from {
+                let copied = crate::db::import::copy_all(source, db)?;
+                crate::log!("copied {copied} row(s) from state.db — it is not used again and stays as a backup");
+            }
             db.set_schema_version(SCHEMA_VERSION)?;
             current = SCHEMA_VERSION;
         }
@@ -1335,6 +1376,7 @@ impl From<rusqlite::Error> for StoreError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db::Backend;
     use rusqlite::Connection;
 
     /// Two boots racing one directory used to fail with `database is locked`: the WAL pragma took
@@ -1364,7 +1406,7 @@ mod tests {
     use base64::Engine as _;
 
     fn store() -> Store {
-        Store::open_in_memory().expect("in-memory store")
+        Store::open_for_tests()
     }
 
     #[test]
@@ -1630,6 +1672,98 @@ mod tests {
                 .opt_int(0)
                 .unwrap();
         assert_eq!(stored, Some(1));
+    }
+
+    #[test]
+    fn a_sqlite_store_moves_onto_postgres_once_with_everything_intact() {
+        let Ok(base) = std::env::var("ISA_TEST_POSTGRES_URL") else {
+            eprintln!("skipped: ISA_TEST_POSTGRES_URL is not set");
+            return;
+        };
+        let schema = format!("isa_move_{}", std::process::id());
+        let admin = crate::db::postgres::Postgres::connect_isolated(&base);
+        admin
+            .script(&format!(
+                "DROP SCHEMA IF EXISTS {schema} CASCADE; CREATE SCHEMA {schema};"
+            ))
+            .unwrap();
+        let url = format!(
+            "{base}{}options=-c%20search_path%3D{schema}",
+            if base.contains('?') { "&" } else { "?" }
+        );
+
+        let dir = std::env::temp_dir().join(format!("isa-move-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.to_str().unwrap();
+
+        let old = Store::open(path).unwrap();
+        old.seen_add("m1", "c1", "a1", Some("o1"), false).unwrap();
+        old.seen_add("m1", "c2", "a2", None, true).unwrap();
+        old.trail_pending_add("al", "m1", "join", "hello").unwrap();
+        old.cache_put("k", 42).unwrap();
+        old.added_record("al", "u1").unwrap();
+        old.kv_set("settings", &serde_json::json!({"shareLinkJoin": false}))
+            .unwrap();
+        old.state.lock().unwrap().contributors.insert(
+            "person-1".into(),
+            Contributor {
+                user_id: "u-1".into(),
+                api_key: "key-1".into(),
+                password: None,
+                avatar_done: true,
+                via_peer: Some("peer".into()),
+                peer_user_id: None,
+                home_peer: None,
+            },
+        );
+        old.state.lock().unwrap().identity = Some(Identity {
+            v: 1,
+            alg: "ed25519".into(),
+            public: "A".repeat(43),
+            private: "B".repeat(43),
+            created_at: "2026-09-21T00:00:00.000Z".into(),
+        });
+        old.save().unwrap();
+        drop(old);
+
+        let moved = Store::open_postgres(path, &url).unwrap();
+        assert_eq!(moved.seen_for_mapping("m1").unwrap().len(), 2);
+        assert!(moved.seen_for_mapping("m1").unwrap()[1].stored_full);
+        assert!(moved.seen_has("m1", "c1").unwrap());
+        assert_eq!(moved.cache_total().unwrap(), 42);
+        assert!(moved.added_has("al", "u1").unwrap());
+        assert_eq!(
+            moved.kv("settings").unwrap().unwrap()["shareLinkJoin"],
+            false
+        );
+        assert_eq!(moved.trail_pending_all().unwrap()[0].text, "hello");
+        {
+            let state = moved.state.lock().unwrap();
+            assert_eq!(state.contributors["person-1"].api_key, "key-1");
+            assert!(state.identity.is_some());
+        }
+        let next = moved.trail_pending_add("al", "m1", "leave", "bye").unwrap();
+        assert!(next > moved.trail_pending_all().unwrap()[0].id);
+        assert_eq!(moved.user_version().unwrap(), SCHEMA_VERSION);
+        drop(moved);
+
+        let sqlite_again = Store::open(path).unwrap();
+        sqlite_again
+            .seen_add("m1", "c3", "a3", Some("o3"), false)
+            .unwrap();
+        drop(sqlite_again);
+        let reopened = Store::open_postgres(path, &url).unwrap();
+        assert!(
+            !reopened.seen_has("m1", "c3").unwrap(),
+            "a database that already holds a store is never overwritten from state.db"
+        );
+        assert_eq!(reopened.trail_pending_all().unwrap().len(), 2);
+
+        admin
+            .script(&format!("DROP SCHEMA {schema} CASCADE;"))
+            .unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -15,6 +15,10 @@ axum = { version = "0.8", features = ["http1", "json", "query", "tokio"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.37", features = ["bundled"] }
+# The optional second store (ISA_DATABASE_URL). The sync client, because the store is called from
+# synchronous code; it runs on its own thread, never inside the async runtime. No TLS feature: the
+# connection is plain, so it belongs on a private network.
+postgres = { version = "0.19", default-features = false }
 # gzip/brotli/deflate are NOT optional: Immich serves its own SPA bundles compressed, and the
 # passthrough strips `content-encoding` on the way out (src/web/passthrough.rs) because reqwest
 # hands it a DECOMPRESSED body. Without these features reqwest passes the compressed bytes through

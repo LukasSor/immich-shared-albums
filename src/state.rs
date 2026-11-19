@@ -58,7 +58,13 @@ impl State {
         restrict_data_dir(&data_dir)?;
         warn_if_not_a_volume(&data_dir);
 
-        let store = Store::open(&data_dir)?;
+        let store = match &cfg().database_url {
+            Some(url) => {
+                crate::log!("using the Postgres database from ISA_DATABASE_URL");
+                Store::open_postgres(&data_dir, url)?
+            }
+            None => Store::open(&data_dir)?,
+        };
         let state = Arc::new(State {
             store,
             unlinking: RwLock::new(HashSet::new()),
